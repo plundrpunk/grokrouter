@@ -32,7 +32,7 @@ Install the official **Grok Bot 0.30.0** app and make sure it is in `/Applicatio
 Open **Terminal**, paste the command below, and press Return:
 
 ```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/promptadvisers/grokrouter/v0.1.0-beta.39/scripts/install-macos.sh)"
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.39/scripts/install-macos.sh)"
 ```
 
 The script downloads this public source, builds GrokRouter on your Mac, verifies the local app signature, installs it to `~/Applications/GrokRouter.app`, and opens it. It does not need Git, `sudo`, an installer package, or an Apple signing certificate.
