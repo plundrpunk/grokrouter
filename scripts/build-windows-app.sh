@@ -92,6 +92,8 @@ ZIP_PATH="$BUILD_ROOT/grokrouter-${VERSION}-windows-${ARCH}.zip"
 rm -f "$ZIP_PATH" "$ZIP_PATH.sha256"
 if command -v ditto >/dev/null 2>&1; then
   ditto -c -k --sequesterRsrc --keepParent "$APP_ROOT" "$ZIP_PATH"
+elif command -v 7z >/dev/null 2>&1; then
+  (cd "$(dirname "$APP_ROOT")" && 7z a -tzip -mx=7 "$ZIP_PATH" "$(basename "$APP_ROOT")" >/dev/null)
 elif command -v powershell.exe >/dev/null 2>&1; then
   WINDOWS_APP_ROOT="$(cygpath -w "$APP_ROOT")"
   WINDOWS_ZIP_PATH="$(cygpath -w "$ZIP_PATH")"

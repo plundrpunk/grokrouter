@@ -60,6 +60,7 @@ test("Windows packaging covers both official architectures", () => {
   assert.match(build, /Windows mascot marker must occur exactly once/);
   assert.match(build, /windows-\$\{ARCH\}-setup\.exe/);
   assert.match(build, /ROUTER_WINDOWS_REQUIRE_SETUP/);
+  assert.match(build, /command -v 7z/);
   assert.match(setup, /Inno Setup 6/);
   assert.match(setup, /DefaultDirName=\{localappdata\}\\Programs\\GrokRouter/);
   assert.match(setup, /Name: "\{autoprograms\}\\GrokRouter"/);
