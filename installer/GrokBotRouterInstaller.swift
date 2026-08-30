@@ -196,7 +196,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         iconView.widthAnchor.constraint(equalToConstant: 88).isActive = true
         iconView.heightAnchor.constraint(equalToConstant: 88).isActive = true
 
-        let eyebrow = NSTextField(labelWithString: "PRIVATE BETA  •  GROK BOT 0.30.0")
+        let eyebrow = NSTextField(labelWithString: "GROK BOT 0.30.0")
         eyebrow.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         eyebrow.textColor = NSColor(calibratedRed: 1.0, green: 0.48, blue: 0.12, alpha: 1)
         let title = NSTextField(labelWithString: "Bring your own model.")

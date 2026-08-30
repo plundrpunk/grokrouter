@@ -47,6 +47,8 @@ test("Windows renderer is isolated from Node and never stores the OpenRouter key
   assert.match(html, /connect-src 'none'/);
   assert.match(html, /Bring your own model\./);
   assert.doesNotMatch(html, /Bring your own brain\./);
+  assert.match(html, /GROK BOT 0\.30\.0/);
+  assert.doesNotMatch(html, /PRIVATE BETA/);
 });
 
 test("Windows packaging covers both official architectures", () => {
