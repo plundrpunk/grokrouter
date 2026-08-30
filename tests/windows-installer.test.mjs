@@ -57,6 +57,8 @@ test("Windows packaging covers both official architectures", () => {
   assert.match(payloadBuild, /cd "\$PROJECT_ROOT" && node -p/);
   assert.match(build, /command -v sha256sum/);
   assert.match(payloadBuild, /command -v sha256sum/);
+  assert.match(build, /basename "\$ZIP_PATH"/);
+  assert.match(payloadBuild, /basename "\$ARCHIVE"/);
   assert.doesNotMatch(build, /require\('\$PROJECT_ROOT\/package\.json'\)/);
   assert.doesNotMatch(payloadBuild, /require\('\$PROJECT_ROOT\/package\.json'\)/);
 });

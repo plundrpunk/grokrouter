@@ -46,5 +46,8 @@ printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/VERSION"
 
 ARCHIVE="$BUILD_ROOT/grokbot-router-payload-${VERSION}.tgz"
 tar -czf "$ARCHIVE" -C "$STAGE_ROOT" grokbot-router-payload
-"$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "$ARCHIVE" > "$ARCHIVE.sha256"
+(
+  cd "$PROJECT_ROOT"
+  "$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "build/$(basename "$ARCHIVE")"
+) > "$ARCHIVE.sha256"
 printf '%s\n' "$ARCHIVE"

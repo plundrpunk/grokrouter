@@ -10,7 +10,7 @@ Host-replacement recovery for Grok Bot 0.30.0.
 - The redesigned macOS app and release archive are now named **GrokRouter**.
 - Added matching Windows x64 and Arm64 GrokRouter packages. They use the same loopback/noVNC transport, paced checksummed transfer, protected secret handoff, exact version gate, offline terminal OCR, Doctor, Repair, and verified stock restore. Windows packages remain preview-only until the exact signed artifact passes the live Windows install/restore/fresh-Bot gate.
 - The exact beta.39 artifact reinstalled on the replacement host, then passed a genuinely-new-Bot beta.39 doctor and deterministic OpenRouter Claude `/provider` receipt. The installer Doctor also completed across a target rotation without the former message-size failure, and the separate one-click Repair action completed before `/provider` passed again after its restart.
-- Exact current local beta.39 `grokrouter-0.1.0-beta.39-macos.zip` SHA-256: `7da4f0991a27f61ef4ff875ac7bf0a05348bb57d72a739ac559f4635a8a3f5c0`.
+- Exact current local beta.39 `grokrouter-0.1.0-beta.39-macos.zip` SHA-256: `82792828ae56960619acce8e5e5dd1317c2c22234edaf9e5d691ac1a7e5d50fe`.
 
 Beta.38 previously added fresh-Bot usability and delivery-loop hardening:
 

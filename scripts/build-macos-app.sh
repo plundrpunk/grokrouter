@@ -54,6 +54,6 @@ if [[ -n "${ROUTER_NOTARY_PROFILE:-}" ]]; then
   xcrun stapler validate "$APP_ROOT"
 fi
 
-shasum -a 256 "$ZIP_PATH" > "$ZIP_PATH.sha256"
+(cd "$BUILD_ROOT" && shasum -a 256 "$(basename "$ZIP_PATH")") > "$ZIP_PATH.sha256"
 
 printf '%s\n' "$APP_ROOT" "$ZIP_PATH"

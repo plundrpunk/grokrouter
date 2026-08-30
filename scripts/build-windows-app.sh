@@ -100,5 +100,8 @@ elif command -v powershell.exe >/dev/null 2>&1; then
 else
   (cd "$(dirname "$APP_ROOT")" && zip -qry "$ZIP_PATH" "$(basename "$APP_ROOT")")
 fi
-"$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "$ZIP_PATH" > "$ZIP_PATH.sha256"
+(
+  cd "$BUILD_ROOT"
+  "$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "$(basename "$ZIP_PATH")"
+) > "$ZIP_PATH.sha256"
 printf '%s\n' "$APP_ROOT" "$ZIP_PATH"
