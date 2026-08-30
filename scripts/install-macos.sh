@@ -26,7 +26,11 @@ if [[ "$(uname -m)" != "arm64" ]]; then
   fail "GrokRouter currently supports Apple silicon Macs only"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd || true)"
+SCRIPT_PATH="${BASH_SOURCE[0]:-}"
+SCRIPT_DIR=""
+if [[ -n "$SCRIPT_PATH" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" 2>/dev/null && pwd || true)"
+fi
 if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/../installer/GrokBotRouterInstaller.swift" ]]; then
   SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 else
