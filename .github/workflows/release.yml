@@ -1,10 +1,13 @@
-name: Signed private release
+name: Prepare signed public release
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  PUBLIC_RELEASE_REPOSITORY: promptadvisers/grokrouter-downloads
 
 jobs:
   macos:
@@ -50,6 +53,8 @@ jobs:
         with:
           name: release-macos
           path: |
+            build/grokrouter-*-macos.dmg
+            build/grokrouter-*-macos.dmg.sha256
             build/grokrouter-*-macos.zip
             build/grokrouter-*-macos.zip.sha256
           if-no-files-found: error
@@ -86,6 +91,7 @@ jobs:
         env:
           ROUTER_WINDOWS_SIGN_PFX: ${{ runner.temp }}\grokrouter-codesign.pfx
           ROUTER_WINDOWS_SIGN_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          ROUTER_WINDOWS_REQUIRE_SETUP: "1"
         run: |
           npm run build:windows -- x64
           npm run build:windows -- arm64
@@ -97,6 +103,10 @@ jobs:
             build/grokrouter-*-windows-x64.zip.sha256
             build/grokrouter-*-windows-arm64.zip
             build/grokrouter-*-windows-arm64.zip.sha256
+            build/grokrouter-*-windows-x64-setup.exe
+            build/grokrouter-*-windows-x64-setup.exe.sha256
+            build/grokrouter-*-windows-arm64-setup.exe
+            build/grokrouter-*-windows-arm64-setup.exe.sha256
           if-no-files-found: error
 
   release:
@@ -112,14 +122,23 @@ jobs:
           pattern: release-*
           path: release-assets
           merge-multiple: true
-      - name: Create private GitHub release
+      - name: Require public release access
         env:
-          GH_TOKEN: ${{ github.token }}
+          PUBLIC_RELEASE_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
+        run: test -n "$PUBLIC_RELEASE_TOKEN"
+      - name: Create public download draft
+        env:
+          GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           gh release create "v$VERSION" \
+            --repo "$PUBLIC_RELEASE_REPOSITORY" \
+            release-assets/*.dmg \
+            release-assets/*.dmg.sha256 \
+            release-assets/*-setup.exe \
+            release-assets/*-setup.exe.sha256 \
             release-assets/*.zip \
             release-assets/*.zip.sha256 \
             --title "GrokRouter v$VERSION" \
             --notes-file RELEASE_NOTES.md \
-            --prerelease
+            --draft

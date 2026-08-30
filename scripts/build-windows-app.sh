@@ -83,7 +83,7 @@ if [[ -n "${ROUTER_WINDOWS_SIGN_PFX:-}" ]]; then
     printf 'ERROR: Authenticode signing must run on Windows\n' >&2
     exit 1
   fi
-  ROUTER_WINDOWS_EXE="$(cygpath -w "$APP_ROOT/GrokRouter.exe")" \
+  ROUTER_WINDOWS_SIGN_TARGET="$(cygpath -w "$APP_ROOT")" \
     powershell.exe -NoLogo -NoProfile -NonInteractive \
       -ExecutionPolicy Bypass \
       -File "$(cygpath -w "$PROJECT_ROOT/scripts/sign-windows.ps1")"
@@ -104,4 +104,36 @@ fi
   cd "$BUILD_ROOT"
   "$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "$(basename "$ZIP_PATH")"
 ) > "$ZIP_PATH.sha256"
+
+SETUP_PATH="$BUILD_ROOT/grokrouter-${VERSION}-windows-${ARCH}-setup.exe"
+rm -f "$SETUP_PATH" "$SETUP_PATH.sha256"
+if command -v powershell.exe >/dev/null 2>&1 && command -v cygpath >/dev/null 2>&1; then
+  if [[ "${ROUTER_WINDOWS_BUILD_SETUP:-0}" == "1" || "${ROUTER_WINDOWS_REQUIRE_SETUP:-0}" == "1" ]]; then
+    ROUTER_WINDOWS_APP_ROOT="$(cygpath -w "$APP_ROOT")" \
+      ROUTER_WINDOWS_ARCH="$ARCH" \
+      ROUTER_WINDOWS_SETUP_OUTPUT="$(cygpath -w "$SETUP_PATH")" \
+      powershell.exe -NoLogo -NoProfile -NonInteractive \
+        -ExecutionPolicy Bypass \
+        -File "$(cygpath -w "$PROJECT_ROOT/scripts/build-windows-setup.ps1")"
+
+    if [[ -n "${ROUTER_WINDOWS_SIGN_PFX:-}" ]]; then
+      ROUTER_WINDOWS_SIGN_TARGET="$(cygpath -w "$SETUP_PATH")" \
+        powershell.exe -NoLogo -NoProfile -NonInteractive \
+          -ExecutionPolicy Bypass \
+          -File "$(cygpath -w "$PROJECT_ROOT/scripts/sign-windows.ps1")"
+    fi
+
+    (
+      cd "$BUILD_ROOT"
+      "$SHA256_PROGRAM" "${SHA256_ARGUMENTS[@]}" "$(basename "$SETUP_PATH")"
+    ) > "$SETUP_PATH.sha256"
+  fi
+elif [[ "${ROUTER_WINDOWS_REQUIRE_SETUP:-0}" == "1" ]]; then
+  printf 'ERROR: the public Windows release requires a native Windows setup build\n' >&2
+  exit 1
+fi
+
 printf '%s\n' "$APP_ROOT" "$ZIP_PATH"
+if [[ -f "$SETUP_PATH" ]]; then
+  printf '%s\n' "$SETUP_PATH"
+fi

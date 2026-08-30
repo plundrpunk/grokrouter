@@ -8,7 +8,7 @@ Do not frame this as an official integration. Say that it is a version-pinned, u
 
 ## Before recording
 
-- Use the signed and notarized private release, never the local ad-hoc build.
+- Use the signed and notarized public-release candidate, never the local ad-hoc build.
 - Start with a throwaway demo Bot and non-sensitive files.
 - Hide device codes, account identifiers, API keys, terminal history, and unrelated conversations.
 - Run install and restore once off-camera on the same release artifact.

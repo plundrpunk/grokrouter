@@ -8,7 +8,8 @@ bash -n \
   "$PROJECT_ROOT/remote/grokbot-router" \
   "$PROJECT_ROOT/remote/grokbot-router-watchdog" \
   "$PROJECT_ROOT/scripts/build-payload.sh" \
-  "$PROJECT_ROOT/scripts/build-macos-app.sh"
+  "$PROJECT_ROOT/scripts/build-macos-app.sh" \
+  "$PROJECT_ROOT/scripts/build-windows-app.sh"
 python3 -m py_compile "$PROJECT_ROOT/patch/router_patch.py"
 node --check "$PROJECT_ROOT/runtime/run-provider.mjs"
 /usr/bin/swiftc \
@@ -66,6 +67,11 @@ grep -q 'window.title = "GrokRouter"' "$PROJECT_ROOT/installer/GrokBotRouterInst
 [[ "$(grep -c '<string>GrokRouter</string>' "$PROJECT_ROOT/installer/Info.plist")" -eq 2 ]]
 grep -Fq 'APP_ROOT="$BUILD_ROOT/GrokRouter.app"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -Fq 'ZIP_PATH="$BUILD_ROOT/grokrouter-${VERSION}-macos.zip"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -Fq 'DMG_PATH="$BUILD_ROOT/grokrouter-${VERSION}-macos.dmg"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -q 'ln -s /Applications' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -q 'hdiutil create' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -q 'notarytool submit "$DMG_PATH"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -q 'stapler staple "$DMG_PATH"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'CFBundleIconFile' "$PROJECT_ROOT/installer/Info.plist"
 [[ -f "$PROJECT_ROOT/installer/Assets/AppIcon.icns" ]]
 grep -q '"format": "jpeg"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"

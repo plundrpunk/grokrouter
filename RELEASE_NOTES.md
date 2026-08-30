@@ -2,6 +2,13 @@
 
 Host-replacement recovery for Grok Bot 0.30.0.
 
+Audience delivery:
+
+- Added a standard macOS DMG with a drag-to-Applications layout, Developer ID signing, notarization, stapling, and a published SHA-256.
+- Added normal per-user Windows x64 and Arm64 setup executables with Start-menu shortcuts, Authenticode signing, timestamp verification, and published SHA-256 files.
+- Added a separate public binary-download repository and a simple operating-system-aware download page while keeping the implementation repository private.
+- The signed workflow creates a draft first. A release is not made visible until the exact public artifacts pass Gatekeeper, Windows signature, install, restore, reinstall, and fresh-Bot acceptance on clean machines.
+
 - Added a persistent, rate-limited watchdog that detects when Grok replaces the live patched host with an allowlisted stock host, reapplies the existing exact hash-and-anchor-gated patch, and restarts the host.
 - Added XDG desktop autostart for the watchdog. Intentional stock restore disables and removes it so Restore Stock remains authoritative.
 - Added `grokbot-router repair` and a separate **Repair Router** installer action. Unknown hashes and missing anchors still fail closed.
@@ -10,7 +17,6 @@ Host-replacement recovery for Grok Bot 0.30.0.
 - The redesigned macOS app and release archive are now named **GrokRouter**.
 - Added matching Windows x64 and Arm64 GrokRouter packages. They use the same loopback/noVNC transport, paced checksummed transfer, protected secret handoff, exact version gate, offline terminal OCR, Doctor, Repair, and verified stock restore. Windows packages remain preview-only until the exact signed artifact passes the live Windows install/restore/fresh-Bot gate.
 - The exact beta.39 artifact reinstalled on the replacement host, then passed a genuinely-new-Bot beta.39 doctor and deterministic OpenRouter Claude `/provider` receipt. The installer Doctor also completed across a target rotation without the former message-size failure, and the separate one-click Repair action completed before `/provider` passed again after its restart.
-- Exact current local beta.39 `grokrouter-0.1.0-beta.39-macos.zip` SHA-256: `cb4171edec560c4ce39ba4d5d3c8d404086bc253c871058be090b8e20c02994b`.
 
 Beta.38 previously added fresh-Bot usability and delivery-loop hardening:
 

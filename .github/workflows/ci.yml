@@ -28,6 +28,8 @@ jobs:
         with:
           name: grokrouter-macos
           path: |
+            build/grokrouter-*-macos.dmg
+            build/grokrouter-*-macos.dmg.sha256
             build/grokrouter-*-macos.zip
             build/grokrouter-*-macos.zip.sha256
           if-no-files-found: error
@@ -54,6 +56,8 @@ jobs:
         run: npm run test:runtime && npm run test:windows
       - name: Build x64 and Arm64 Windows packages
         shell: bash
+        env:
+          ROUTER_WINDOWS_REQUIRE_SETUP: "1"
         run: |
           npm run build:windows -- x64
           npm run build:windows -- arm64
@@ -65,4 +69,8 @@ jobs:
             build/grokrouter-*-windows-x64.zip.sha256
             build/grokrouter-*-windows-arm64.zip
             build/grokrouter-*-windows-arm64.zip.sha256
+            build/grokrouter-*-windows-x64-setup.exe
+            build/grokrouter-*-windows-x64-setup.exe.sha256
+            build/grokrouter-*-windows-arm64-setup.exe
+            build/grokrouter-*-windows-arm64-setup.exe.sha256
           if-no-files-found: error

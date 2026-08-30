@@ -9,6 +9,7 @@ const html = await readFile(new URL("../installer-windows/index.html", import.me
 const build = await readFile(new URL("../scripts/build-windows-app.sh", import.meta.url), "utf8");
 const payloadBuild = await readFile(new URL("../scripts/build-payload.sh", import.meta.url), "utf8");
 const signing = await readFile(new URL("../scripts/sign-windows.ps1", import.meta.url), "utf8");
+const setup = await readFile(new URL("../scripts/build-windows-setup.ps1", import.meta.url), "utf8");
 const releaseWorkflow = await readFile(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
 
 test("Windows installer keeps the exact compatibility and local-only gates", () => {
@@ -57,6 +58,12 @@ test("Windows packaging covers both official architectures", () => {
   assert.match(build, /windows-\$\{ARCH\}\.zip/);
   assert.match(build, /data:image\/png;base64/);
   assert.match(build, /Windows mascot marker must occur exactly once/);
+  assert.match(build, /windows-\$\{ARCH\}-setup\.exe/);
+  assert.match(build, /ROUTER_WINDOWS_REQUIRE_SETUP/);
+  assert.match(setup, /Inno Setup 6/);
+  assert.match(setup, /DefaultDirName=\{localappdata\}\\Programs\\GrokRouter/);
+  assert.match(setup, /Name: "\{autoprograms\}\\GrokRouter"/);
+  assert.match(setup, /Description: "Open GrokRouter"/);
   assert.match(build, /cd "\$PROJECT_ROOT" && node -p/);
   assert.match(payloadBuild, /cd "\$PROJECT_ROOT" && node -p/);
   assert.match(build, /command -v sha256sum/);
@@ -67,11 +74,13 @@ test("Windows packaging covers both official architectures", () => {
   assert.doesNotMatch(payloadBuild, /require\('\$PROJECT_ROOT\/package\.json'\)/);
 });
 
-test("private releases fail closed without Authenticode credentials", () => {
+test("public releases fail closed without Authenticode credentials", () => {
   assert.match(build, /ROUTER_WINDOWS_SIGN_PFX/);
   assert.match(signing, /signtool\.exe/);
   assert.match(signing, /\/tr "http:\/\/timestamp\.digicert\.com"/);
   assert.match(signing, /verify \/pa \/all/);
   assert.match(releaseWorkflow, /WINDOWS_CODESIGN_PFX_BASE64/);
+  assert.match(releaseWorkflow, /PUBLIC_RELEASE_TOKEN/);
+  assert.match(releaseWorkflow, /promptadvisers\/grokrouter-downloads/);
   assert.match(releaseWorkflow, /needs: \[macos, windows\]/);
 });

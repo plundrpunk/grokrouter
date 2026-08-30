@@ -11,14 +11,25 @@
 </p>
 
 <p align="center">
-  <img alt="Private beta 0.1.0-beta.39" src="https://img.shields.io/badge/private_beta-0.1.0--beta.39-ff6b2c?style=flat-square">
+  <img alt="Beta 0.1.0-beta.39" src="https://img.shields.io/badge/beta-0.1.0--beta.39-ff6b2c?style=flat-square">
   <img alt="Grok Bot 0.30.0 only" src="https://img.shields.io/badge/Grok_Bot-0.30.0_only-171717?style=flat-square">
   <img alt="macOS Apple silicon" src="https://img.shields.io/badge/macOS-Apple_silicon-111111?style=flat-square&logo=apple">
   <img alt="Windows x64 and Arm64 preview" src="https://img.shields.io/badge/Windows-x64_%2B_Arm64_preview-0078d4?style=flat-square&logo=windows11">
 </p>
 
 > [!IMPORTANT]
-> GrokRouter is an unofficial, reversible private beta pinned to **Grok Bot 0.30.0**. It patches an implementation detail and is not affiliated with xAI, X, Anysphere, OpenAI, Anthropic, or OpenRouter. Unknown Grok Bot builds are rejected instead of guessed at.
+> GrokRouter is an unofficial, reversible beta pinned to **Grok Bot 0.30.0**. It patches an implementation detail and is not affiliated with xAI, X, Anysphere, OpenAI, Anthropic, or OpenRouter. Unknown Grok Bot builds are rejected instead of guessed at.
+
+## Download
+
+**YouTube viewers should use the official [GrokRouter download page](https://promptadvisers.github.io/grokrouter-downloads/).** You do not need Git, source code, Terminal, or access to this private development repository.
+
+The download page detects your computer and offers the right signed installer:
+
+- **Mac:** download the `.dmg`, open it, and drag **GrokRouter** into **Applications**.
+- **Windows:** download the `-setup.exe`, run it, and open **GrokRouter** from the Start menu. Windows builds remain preview-only until the signed release completes the real-device acceptance gate.
+
+If macOS says the developer cannot be verified, or Windows identifies the publisher as unknown, **do not bypass the warning**. Delete that file and return to the official download page. Public builds are published only after signing, notarization, checksum, and fresh-machine verification.
 
 ## Install and use it in plain English
 
@@ -29,12 +40,12 @@ For the supported Grok Bot 0.30.0 build, the normal setup is: open Grok Bot, ope
 - Install the official **Grok Bot 0.30.0** desktop app.
 - Have a Codex account, an OpenRouter API key, or both.
 - Make sure you can open the Computer for at least one Bot in Grok Bot.
-- Download and unzip the GrokRouter package for your computer. The macOS package is currently the live-verified build; Windows x64 and Arm64 packages are previews.
+- Install GrokRouter from the official download page. The macOS app is currently the live-verified build; Windows x64 and Arm64 installers are previews.
 
 ### Step by step
 
 1. **Open Grok Bot** and leave it visible.
-2. **Open GrokRouter.** On Windows, run `GrokRouter.exe` from the extracted folder.
+2. **Open GrokRouter.** Find it in Applications on Mac or the Start menu on Windows.
 3. **Choose what you want to use.** Turn Codex SDK and OpenRouter on or off, choose the default provider, and choose the default models.
 4. **Add your OpenRouter key** if you enabled OpenRouter. The installer sends it directly to Grok Bot's protected Secrets store and clears the field.
 5. **Click Install Router.** GrokRouter checks the exact app version before changing anything and saves a verified stock backup first.
@@ -79,9 +90,9 @@ For the friendly explanation, read [How it works](docs/HOW-IT-WORKS.md). For imp
 
 | Platform | Package | Current evidence |
 | --- | --- | --- |
-| macOS 12+, Apple silicon | `grokrouter-…-macos.zip` | Exact beta.39 artifact installed successfully; a genuinely new Bot passed Doctor and provider selection. The preceding beta.38 candidate passed install → restore → reinstall. |
-| Windows x64 | `grokrouter-…-windows-x64.zip` | Package builds, PE architecture is verified, offline OCR gate passes, and static/security tests pass. Real-Windows signed install → restore → reinstall → fresh-Bot acceptance is still required. |
-| Windows Arm64 | `grokrouter-…-windows-arm64.zip` | Same implementation and code-level gates as x64; the real-device acceptance cycle is still required. |
+| macOS 12+, Apple silicon | `grokrouter-…-macos.dmg` | Exact beta.39 app installed successfully; a genuinely new Bot passed Doctor and provider selection. The preceding beta.38 candidate passed install → restore → reinstall. The signed public DMG still requires final Gatekeeper verification. |
+| Windows x64 | `grokrouter-…-windows-x64-setup.exe` | Package builds, PE architecture is verified, offline OCR gate passes, and static/security tests pass. Real-Windows signed install → restore → reinstall → fresh-Bot acceptance is still required. |
+| Windows Arm64 | `grokrouter-…-windows-arm64-setup.exe` | Same implementation and code-level gates as x64; the real-device acceptance cycle is still required. |
 
 Windows packages are intentionally labeled **preview** until the exact signed artifacts pass the full live gate. A macOS pass is not treated as Windows evidence. The detailed claim ledger lives in the [test matrix](docs/TEST-MATRIX.md).
 
@@ -94,11 +105,11 @@ Windows packages are intentionally labeled **preview** until the exact signed ar
 - macOS 12+ on Apple silicon, or Windows x64/Arm64
 - A Codex account, an OpenRouter key, or both
 
-### From a private release
+### From the official download page
 
-1. Download the package for your platform from the private GitHub prerelease.
-2. Unzip it.
-3. On macOS, open **GrokRouter**. On Windows, open the extracted folder and run **GrokRouter.exe**.
+1. Open the [GrokRouter download page](https://promptadvisers.github.io/grokrouter-downloads/).
+2. On Mac, open the DMG and drag **GrokRouter** into Applications. On Windows, run the setup file.
+3. Open **GrokRouter** from Applications or the Start menu.
 4. Select Codex SDK, OpenRouter, or both. Choose the default provider and model.
 5. Keep Grok Bot visible and click **Install Router**.
 6. For Codex, click **Start Codex Sign-in** and complete the device-code flow in the Bot terminal.
@@ -157,7 +168,7 @@ If the packaged installer UI or delivery mechanism fails, start with these files
 
 Building the source yourself can fix packaging, signing, UI, or machine-specific delivery problems. It does **not** automatically support a different Grok Bot release. A new Grok version needs a new exact manifest, a reviewed transformation, all tests, and the complete live install → restore → reinstall → fresh-Bot acceptance cycle.
 
-The repository is currently licensed for authorized private-beta testing, not redistribution. Read [the license](LICENSE.md) before sharing a custom build.
+The source remains private and custom builds may not be redistributed. Official unmodified binaries may be downloaded and used under the limited public terms in [the license](LICENSE.md).
 
 ## Prove it with a brand-new Bot
 
@@ -204,7 +215,7 @@ Invalid or near-miss model controls return bounded help instead of becoming mode
 | App identity | `installer/Info.plist`, `installer/Assets/` | GrokRouter name, mascot, macOS icon, and Windows icon resources |
 | Payload builder | `scripts/build-payload.sh` | Creates the small checksummed archive sent into the Bot computer |
 | Platform builders | `scripts/build-macos-app.sh`, `scripts/build-windows-app.sh` | Produce app folders, ZIPs, and SHA-256 files for macOS, Windows x64, and Windows Arm64 |
-| Windows signing | `scripts/sign-windows.ps1` | Authenticode-signs and verifies both Windows architectures for private releases |
+| Windows setup and signing | `scripts/build-windows-setup.ps1`, `scripts/sign-windows.ps1` | Builds per-user Start-menu installers, Authenticode-signs every packaged executable, and verifies the signatures |
 | Remote bootstrap | `remote/install.sh` | Idempotently installs pinned dependencies, config, CLI, runtime, patch, and watchdog inside the Bot computer |
 | Management CLI | `remote/grokbot-router` | Status, enable, disable, repair, Doctor, and verified stock uninstall |
 | Lifecycle watchdog | `remote/grokbot-router-watchdog` | Rate-limited repair when Grok replaces the live host with a known stock build; never repairs an unknown build or intentional restore |
@@ -271,13 +282,19 @@ Build outputs go under `build/`:
 ```text
 grokrouter-<version>-macos.zip
 grokrouter-<version>-macos.zip.sha256
+grokrouter-<version>-macos.dmg
+grokrouter-<version>-macos.dmg.sha256
 grokrouter-<version>-windows-x64.zip
 grokrouter-<version>-windows-x64.zip.sha256
 grokrouter-<version>-windows-arm64.zip
 grokrouter-<version>-windows-arm64.zip.sha256
+grokrouter-<version>-windows-x64-setup.exe
+grokrouter-<version>-windows-x64-setup.exe.sha256
+grokrouter-<version>-windows-arm64-setup.exe
+grokrouter-<version>-windows-arm64-setup.exe.sha256
 ```
 
-Local macOS builds are ad-hoc signed. Local Windows builds are unsigned development artifacts. The private release workflow refuses to publish unless Apple Developer ID/notarization credentials and Windows Authenticode credentials are configured.
+Local macOS builds are ad-hoc signed. Local Windows builds are unsigned development artifacts. The public release workflow refuses to prepare a draft unless Apple Developer ID/notarization credentials, Windows Authenticode credentials, and access to the public binary repository are configured.
 
 Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritative files, protected safety boundaries, verification commands, and fresh-Bot acceptance gate.
 
@@ -296,7 +313,7 @@ See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and t
 - [Fresh-Bot acceptance gate](docs/FRESH-BOT-ACCEPTANCE.md)
 - [Verification matrix](docs/TEST-MATRIX.md)
 - [Security and trust boundary](SECURITY.md)
-- [Private release procedure](docs/RELEASE.md)
+- [Public release procedure](docs/RELEASE.md)
 - [OpenGrok comparison](docs/OPENGROK-COMPARISON.md)
 - [YouTube demo runbook](docs/YOUTUBE-DEMO.md)
 - [Editable 16:9 architecture diagram](docs/diagrams/grokbot-router-end-to-end.svg)
@@ -311,6 +328,6 @@ Never add a wildcard hash. Never ship a development override. Never call a previ
 ---
 
 <p align="center">
-  <strong>GrokRouter</strong> · Private beta by Prompt Advisers<br>
+  <strong>GrokRouter</strong> · Beta by Prompt Advisers<br>
   The official Grok Bot stays in charge. You choose the model.
 </p>
