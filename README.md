@@ -20,6 +20,33 @@
 > [!IMPORTANT]
 > GrokRouter is an unofficial, reversible private beta pinned to **Grok Bot 0.30.0**. It patches an implementation detail and is not affiliated with xAI, X, Anysphere, OpenAI, Anthropic, or OpenRouter. Unknown Grok Bot builds are rejected instead of guessed at.
 
+## Install and use it in plain English
+
+For the supported Grok Bot 0.30.0 build, the normal setup is: open Grok Bot, open GrokRouter, choose your model, and click **Install Router**. There are only a few details to know.
+
+### Before you start
+
+- Install the official **Grok Bot 0.30.0** desktop app.
+- Have a Codex account, an OpenRouter API key, or both.
+- Make sure you can open the Computer for at least one Bot in Grok Bot.
+- Download and unzip the GrokRouter package for your computer. The macOS package is currently the live-verified build; Windows x64 and Arm64 packages are previews.
+
+### Step by step
+
+1. **Open Grok Bot** and leave it visible.
+2. **Open GrokRouter.** On Windows, run `GrokRouter.exe` from the extracted folder.
+3. **Choose what you want to use.** Turn Codex SDK and OpenRouter on or off, choose the default provider, and choose the default models.
+4. **Add your OpenRouter key** if you enabled OpenRouter. The installer sends it directly to Grok Bot's protected Secrets store and clears the field.
+5. **Click Install Router.** GrokRouter checks the exact app version before changing anything and saves a verified stock backup first.
+6. **If GrokRouter asks for a Bot computer,** return to Grok Bot, select any Bot, and click **Open computer**. Keep Grok Bot and GrokRouter open while the installer finishes. You do not need to type terminal commands yourself.
+7. **If you enabled Codex, click Codex sign-in** in GrokRouter and complete the sign-in instructions shown in the Bot terminal.
+8. **Create a brand-new Bot** after installation. In its normal chat box, send `/router doctor`, then `/provider`. If both status messages look healthy, chat normally.
+
+From then on, stay inside Grok Bot. Send `/models` to see the available models, paste one listed model ID by itself to switch that Bot, and send `/provider` whenever you want to confirm its current choice. These controls are typed into the normal message box; they are not entries in Grok Bot's slash-command menu.
+
+> [!CAUTION]
+> If GrokRouter says your copy of Grok Bot is unsupported or has changed, stop there. That refusal protects the stock app. Do not force the installation.
+
 ## The short version
 
 GrokRouter keeps Grok Bot as the product you touch and changes the model runtime behind a Bot.
@@ -81,6 +108,56 @@ The installer transfers a small checksummed bootstrap through the Bot computer, 
 
 > [!NOTE]
 > Windows users should remove an older extracted GrokRouter folder before extracting a replacement ZIP. That prevents Windows from launching stale packaged assets.
+
+## Build the installers yourself
+
+Authorized testers can build the complete installer from this repository. The macOS Swift app, Windows Electron app, remote bootstrap, provider runtime, patch engine, exact compatibility manifest, tests, signing workflow, and recovery path are all included. Grok Bot's proprietary host source is not included or required in the repository.
+
+### What you need
+
+- Git, Bash, Node.js 18 or newer, npm, Python 3, and `shasum` or `sha256sum`
+- For macOS: macOS with Xcode Command Line Tools, including Swift and `codesign`
+- For Windows packages: a ZIP tool; signing additionally requires Windows, PowerShell, `signtool.exe`, and your own Authenticode certificate
+
+### Build commands
+
+```bash
+git clone https://github.com/promptadvisers/grokrouter.git
+cd grokrouter
+npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
+npm test
+```
+
+Build the macOS package on a Mac:
+
+```bash
+npm run build:macos
+```
+
+Build either or both Windows architectures from a Bash environment:
+
+```bash
+npm run build:windows -- x64
+npm run build:windows -- arm64
+```
+
+Finished apps and checksum files appear in `build/`. A local macOS build is ad-hoc signed, and local Windows builds are unsigned development packages. Trusted release builds require the signing and notarization setup in [the release guide](docs/RELEASE.md).
+
+If the packaged installer UI or delivery mechanism fails, start with these files:
+
+| Area to change | Source |
+| --- | --- |
+| macOS installer | `installer/GrokBotRouterInstaller.swift` |
+| Windows installer | `installer-windows/` |
+| macOS and Windows packaging | `scripts/build-macos-app.sh`, `scripts/build-windows-app.sh` |
+| Files delivered into the Bot computer | `scripts/build-payload.sh`, `remote/install.sh` |
+| Exact supported Grok build | `patch/manifests/0.30.0.json`, `patch/router_patch.py` |
+| Provider behavior | `runtime/run-provider.mjs` |
+| Required proof before calling a build usable | `docs/FRESH-BOT-ACCEPTANCE.md`, `docs/TEST-MATRIX.md` |
+
+Building the source yourself can fix packaging, signing, UI, or machine-specific delivery problems. It does **not** automatically support a different Grok Bot release. A new Grok version needs a new exact manifest, a reviewed transformation, all tests, and the complete live install → restore → reinstall → fresh-Bot acceptance cycle.
+
+The repository is currently licensed for authorized private-beta testing, not redistribution. Read [the license](LICENSE.md) before sharing a custom build.
 
 ## Prove it with a brand-new Bot
 
@@ -235,5 +312,5 @@ Never add a wildcard hash. Never ship a development override. Never call a previ
 
 <p align="center">
   <strong>GrokRouter</strong> · Private beta by Prompt Advisers<br>
-  The official Grok Bot stays in charge. You choose the brain.
+  The official Grok Bot stays in charge. You choose the model.
 </p>
