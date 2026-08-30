@@ -8,7 +8,7 @@ Do not frame this as an official integration. Say that it is a version-pinned, u
 
 ## Before recording
 
-- Use the signed and notarized public-release candidate, never the local ad-hoc build.
+- Use the exact public source commit viewers will install. Build it through the documented source-installer path.
 - Start with a throwaway demo Bot and non-sensitive files.
 - Hide device codes, account identifiers, API keys, terminal history, and unrelated conversations.
 - Run install and restore once off-camera on the same release artifact.
@@ -17,7 +17,7 @@ Do not frame this as an official integration. Say that it is a version-pinned, u
 
 ## Beta.38 recording decision
 
-Beta.38 is ready for a scoped proof of the turnkey install and model-routing experience: exact installer, genuinely new Bot, normal greeting, `/router doctor`, `/models`, paste Luna, `/provider`, a normal model-identity reply, one exact-once text reply, second-Bot isolation, stock restore, and reinstall. The local artifact is ad-hoc signed, so create the signed/notarized release before distributing it to viewers.
+Beta.38 is ready for a scoped proof of the install and model-routing experience: exact installer, genuinely new Bot, normal greeting, `/router doctor`, `/models`, paste Luna, `/provider`, a normal model-identity reply, one exact-once text reply, second-Bot isolation, stock restore, and reinstall. Viewers build the app locally from the public source, so film the same README installation command they will use.
 
 Do not currently film or narrate OpenRouter Shell, Screenshot, or sub-agent parity as working in this candidate. The latest explicit Shell turn received zero actionable host schemas; the adapter failed safely instead of executing model-authored pseudo-tool markup. Add those scenes only after the same release artifact passes every capability row unedited.
 
@@ -35,7 +35,7 @@ Do not animate the optional tool loop as a guaranteed beta.38 result. Present it
 
 1. **Receipt:** show stock Grok Bot 0.30.0 and a normal Bot with its computer.
 2. **Simple diagram:** show the 16:9 end-to-end diagram and deliver the explanation above.
-3. **Installer:** unzip, open, select Codex, and click Install. Explain the exact hash gate and automatic stock backup while dependencies install.
+3. **Installer:** paste the README install command, let GrokRouter open, select Codex, and click Install. Explain the exact hash gate and automatic stock backup while dependencies install.
 4. **Authentication:** click Start Codex Sign-in, blur the code/account, and complete the device flow.
 5. **Fresh-Bot identity:** after installation, create a brand-new Bot on camera and leave its automatic greeting visible. It must greet normally without invoking a tool. Then send `/router doctor`, `/models`, paste one listed model ID by itself, and send `/provider`. Explain that the UI is Grok Bot but inference is now the named routed model.
 6. **Native Codex proof:** ask: `Create /workspace/codex-router-proof.txt with today's date, read it back, and tell me the exact contents.` Show the file in the Bot computer.

@@ -14,22 +14,43 @@
   <img alt="Beta 0.1.0-beta.39" src="https://img.shields.io/badge/beta-0.1.0--beta.39-ff6b2c?style=flat-square">
   <img alt="Grok Bot 0.30.0 only" src="https://img.shields.io/badge/Grok_Bot-0.30.0_only-171717?style=flat-square">
   <img alt="macOS Apple silicon" src="https://img.shields.io/badge/macOS-Apple_silicon-111111?style=flat-square&logo=apple">
-  <img alt="Windows x64 and Arm64 preview" src="https://img.shields.io/badge/Windows-x64_%2B_Arm64_preview-0078d4?style=flat-square&logo=windows11">
 </p>
 
 > [!IMPORTANT]
 > GrokRouter is an unofficial, reversible beta pinned to **Grok Bot 0.30.0**. It patches an implementation detail and is not affiliated with xAI, X, Anysphere, OpenAI, Anthropic, or OpenRouter. Unknown Grok Bot builds are rejected instead of guessed at.
 
-## Download
+## Install on Mac
 
-**YouTube viewers should use the official [GrokRouter download page](https://promptadvisers.github.io/grokrouter-downloads/).** You do not need Git, source code, Terminal, or access to this private development repository.
+GrokRouter is currently **Mac-only** and supports Apple silicon. The simplest install builds the small native app locally from this public repository, then puts it in your personal Applications folder.
 
-The download page detects your computer and offers the right signed installer:
+### 1. Install Grok Bot first
 
-- **Mac:** download the `.dmg`, open it, and drag **GrokRouter** into **Applications**.
-- **Windows:** download the `-setup.exe`, run it, and open **GrokRouter** from the Start menu. Windows builds remain preview-only until the signed release completes the real-device acceptance gate.
+Install the official **Grok Bot 0.30.0** app and make sure it is in `/Applications`. Open it once and confirm that you can select a Bot and open its Computer.
 
-If macOS says the developer cannot be verified, or Windows identifies the publisher as unknown, **do not bypass the warning**. Delete that file and return to the official download page. Public builds are published only after signing, notarization, checksum, and fresh-machine verification.
+### 2. Copy this one command into Terminal
+
+Open **Terminal**, paste the command below, and press Return:
+
+```bash
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/promptadvisers/grokrouter/v0.1.0-beta.39/scripts/install-macos.sh)"
+```
+
+The script downloads this public source, builds GrokRouter on your Mac, verifies the local app signature, installs it to `~/Applications/GrokRouter.app`, and opens it. It does not need Git, `sudo`, an installer package, or an Apple signing certificate.
+
+If Apple Command Line Tools are missing, macOS will offer to install them. Finish that Apple installation, then run the same command again.
+
+Prefer not to pipe a script into Terminal? Click **Code → Download ZIP**, unzip the repository, and double-click **Install GrokRouter.command**. The complete installer source is [here](scripts/install-macos.sh) for inspection.
+
+### 3. Click Install Router
+
+Keep Grok Bot visible, choose Codex SDK, OpenRouter, or both in GrokRouter, then click **Install Router**. If it asks for a Bot computer, return to Grok Bot, select any Bot, and click **Open computer**.
+
+### 4. Check a new Bot
+
+Create a brand-new Bot after installation. In its normal chat box, send `/router doctor`, then `/provider`. If both status messages look healthy, chat normally.
+
+> [!NOTE]
+> This source-build route is intentionally transparent: your Mac compiles the app from the exact code you can inspect here. GrokRouter never asks you to disable Gatekeeper or install an unknown downloaded binary.
 
 ## Install and use it in plain English
 
@@ -40,12 +61,12 @@ For the supported Grok Bot 0.30.0 build, the normal setup is: open Grok Bot, ope
 - Install the official **Grok Bot 0.30.0** desktop app.
 - Have a Codex account, an OpenRouter API key, or both.
 - Make sure you can open the Computer for at least one Bot in Grok Bot.
-- Install GrokRouter from the official download page. The macOS app is currently the live-verified build; Windows x64 and Arm64 installers are previews.
+- Install GrokRouter from this repository using the command above.
 
 ### Step by step
 
 1. **Open Grok Bot** and leave it visible.
-2. **Open GrokRouter.** Find it in Applications on Mac or the Start menu on Windows.
+2. **Open GrokRouter.** Find it in your personal Applications folder.
 3. **Choose what you want to use.** Turn Codex SDK and OpenRouter on or off, choose the default provider, and choose the default models.
 4. **Add your OpenRouter key** if you enabled OpenRouter. The installer sends it directly to Grok Bot's protected Secrets store and clears the field.
 5. **Click Install Router.** GrokRouter checks the exact app version before changing anything and saves a verified stock backup first.
@@ -88,47 +109,23 @@ For the friendly explanation, read [How it works](docs/HOW-IT-WORKS.md). For imp
 
 ## Platform status
 
-| Platform | Package | Current evidence |
-| --- | --- | --- |
-| macOS 12+, Apple silicon | `grokrouter-…-macos.dmg` | Exact beta.39 app installed successfully; a genuinely new Bot passed Doctor and provider selection. The preceding beta.38 candidate passed install → restore → reinstall. The signed public DMG still requires final Gatekeeper verification. |
-| Windows x64 | `grokrouter-…-windows-x64-setup.exe` | Package builds, PE architecture is verified, offline OCR gate passes, and static/security tests pass. Real-Windows signed install → restore → reinstall → fresh-Bot acceptance is still required. |
-| Windows Arm64 | `grokrouter-…-windows-arm64-setup.exe` | Same implementation and code-level gates as x64; the real-device acceptance cycle is still required. |
+| Platform | Current evidence |
+| --- | --- |
+| macOS 12+, Apple silicon | The exact beta.39 app installed successfully and a genuinely new Bot passed Doctor and provider selection. The preceding beta.38 candidate passed install → restore → reinstall. |
 
-Windows packages are intentionally labeled **preview** until the exact signed artifacts pass the full live gate. A macOS pass is not treated as Windows evidence. The detailed claim ledger lives in the [test matrix](docs/TEST-MATRIX.md).
-
-## Install GrokRouter
-
-### Requirements
-
-- Official Grok Bot **0.30.0**
-- At least one Bot whose computer can be opened
-- macOS 12+ on Apple silicon, or Windows x64/Arm64
-- A Codex account, an OpenRouter key, or both
-
-### From the official download page
-
-1. Open the [GrokRouter download page](https://promptadvisers.github.io/grokrouter-downloads/).
-2. On Mac, open the DMG and drag **GrokRouter** into Applications. On Windows, run the setup file.
-3. Open **GrokRouter** from Applications or the Start menu.
-4. Select Codex SDK, OpenRouter, or both. Choose the default provider and model.
-5. Keep Grok Bot visible and click **Install Router**.
-6. For Codex, click **Start Codex Sign-in** and complete the device-code flow in the Bot terminal.
-7. In Grok Bot chat, send `/router doctor`, then `/provider`.
+Windows is not supported. The detailed claim ledger lives in the [test matrix](docs/TEST-MATRIX.md).
 
 The installer transfers a small checksummed bootstrap through the Bot computer, installs pinned dependencies inside that computer, preserves a stock host backup, closes its temporary diagnostic connection, and reopens Grok Bot normally.
 
-> [!NOTE]
-> Windows users should remove an older extracted GrokRouter folder before extracting a replacement ZIP. That prevents Windows from launching stale packaged assets.
-
 ## Build the installers yourself
 
-Authorized testers can build the complete installer from this repository. The macOS Swift app, Windows Electron app, remote bootstrap, provider runtime, patch engine, exact compatibility manifest, tests, signing workflow, and recovery path are all included. Grok Bot's proprietary host source is not included or required in the repository.
+Anyone can inspect and build the complete Mac installer from this repository for personal, non-commercial use. The native Swift app, remote bootstrap, provider runtime, patch engine, exact compatibility manifest, tests, and recovery path are all included. Grok Bot's proprietary host source is not included or required in the repository.
 
 ### What you need
 
-- Git, Bash, Node.js 18 or newer, npm, Python 3, and `shasum` or `sha256sum`
-- For macOS: macOS with Xcode Command Line Tools, including Swift and `codesign`
-- For Windows packages: a ZIP tool; signing additionally requires Windows, PowerShell, `signtool.exe`, and your own Authenticode certificate
+- macOS 12+ on Apple silicon
+- Xcode Command Line Tools, including Swift and `codesign`
+- Node.js 18 or newer and Python 3 only when running the development test suite
 
 ### Build commands
 
@@ -145,22 +142,14 @@ Build the macOS package on a Mac:
 npm run build:macos
 ```
 
-Build either or both Windows architectures from a Bash environment:
-
-```bash
-npm run build:windows -- x64
-npm run build:windows -- arm64
-```
-
-Finished apps and checksum files appear in `build/`. A local macOS build is ad-hoc signed, and local Windows builds are unsigned development packages. Trusted release builds require the signing and notarization setup in [the release guide](docs/RELEASE.md).
+The app and checksum file appear in `build/`. A local source build is ad-hoc signed for your own Mac.
 
 If the packaged installer UI or delivery mechanism fails, start with these files:
 
 | Area to change | Source |
 | --- | --- |
-| macOS installer | `installer/GrokBotRouterInstaller.swift` |
-| Windows installer | `installer-windows/` |
-| macOS and Windows packaging | `scripts/build-macos-app.sh`, `scripts/build-windows-app.sh` |
+| Mac installer | `installer/GrokBotRouterInstaller.swift` |
+| Mac packaging | `scripts/build-macos-app.sh` |
 | Files delivered into the Bot computer | `scripts/build-payload.sh`, `remote/install.sh` |
 | Exact supported Grok build | `patch/manifests/0.30.0.json`, `patch/router_patch.py` |
 | Provider behavior | `runtime/run-provider.mjs` |
@@ -168,7 +157,7 @@ If the packaged installer UI or delivery mechanism fails, start with these files
 
 Building the source yourself can fix packaging, signing, UI, or machine-specific delivery problems. It does **not** automatically support a different Grok Bot release. A new Grok version needs a new exact manifest, a reviewed transformation, all tests, and the complete live install → restore → reinstall → fresh-Bot acceptance cycle.
 
-The source remains private and custom builds may not be redistributed. Official unmodified binaries may be downloaded and used under the limited public terms in [the license](LICENSE.md).
+Personal, non-commercial source builds are allowed. Redistribution is not. See [the license](LICENSE.md).
 
 ## Prove it with a brand-new Bot
 
@@ -211,11 +200,10 @@ Invalid or near-miss model controls return bounded help instead of becoming mode
 | Component | Source | Responsibility |
 | --- | --- | --- |
 | macOS installer | `installer/GrokBotRouterInstaller.swift` | Native Swift UI, app/version gate, loopback diagnostics, Vision OCR, noVNC transport, install, Doctor, repair, and restore |
-| Windows installer | `installer-windows/` | Isolated Electron UI with context isolation, bundled offline terminal OCR, protected secret handoff, and the same install/repair/restore protocol |
-| App identity | `installer/Info.plist`, `installer/Assets/` | GrokRouter name, mascot, macOS icon, and Windows icon resources |
+| App identity | `installer/Info.plist`, `installer/Assets/` | GrokRouter name, mascot, and macOS icon resources |
 | Payload builder | `scripts/build-payload.sh` | Creates the small checksummed archive sent into the Bot computer |
-| Platform builders | `scripts/build-macos-app.sh`, `scripts/build-windows-app.sh` | Produce app folders, ZIPs, and SHA-256 files for macOS, Windows x64, and Windows Arm64 |
-| Windows setup and signing | `scripts/build-windows-setup.ps1`, `scripts/sign-windows.ps1` | Builds per-user Start-menu installers, Authenticode-signs every packaged executable, and verifies the signatures |
+| Source installer | `scripts/install-macos.sh`, `Install GrokRouter.command` | Builds locally, verifies the app, and installs it without `sudo` |
+| Mac builder | `scripts/build-macos-app.sh` | Produces the native app, optional ZIP, and SHA-256 file |
 | Remote bootstrap | `remote/install.sh` | Idempotently installs pinned dependencies, config, CLI, runtime, patch, and watchdog inside the Bot computer |
 | Management CLI | `remote/grokbot-router` | Status, enable, disable, repair, Doctor, and verified stock uninstall |
 | Lifecycle watchdog | `remote/grokbot-router-watchdog` | Rate-limited repair when Grok replaces the live host with a known stock build; never repairs an unknown build or intentional restore |
@@ -223,8 +211,8 @@ Invalid or near-miss model controls return bounded help instead of becoming mode
 | Patch engine | `patch/router_patch.py` | Original transformation, syntax check, atomic activation, verified backup, dry run, and restore |
 | Provider runtime | `runtime/run-provider.mjs` | Controls, stable Bot identity, per-Bot state, replay protection, Codex/OpenRouter adapters, tool conversion, and redacted audit |
 | Provider defaults | `runtime/provider.default.json` | Packaged provider/model catalog and installer defaults—never credentials |
-| Automated tests | `tests/` | Runtime behavior, patch/restore, payload integrity, installer contracts, Windows isolation, signing, and packaging gates |
-| CI and signed release | `.github/workflows/` | Cross-platform tests/builds plus fail-closed Apple notarization and Windows Authenticode release jobs |
+| Automated tests | `tests/` | Runtime behavior, patch/restore, payload integrity, and native installer contracts |
+| CI | `.github/workflows/ci.yml` | Runs the supported Mac test and build path on every push and pull request |
 | Evidence and operating docs | `docs/` | Architecture, acceptance, test matrix, security/release guidance, diagrams, independent review, and demo runbook |
 
 No proprietary Grok host source is committed or bundled. The repository contains the original transformation and exact compatibility metadata only.
@@ -271,38 +259,26 @@ Read [Security](SECURITY.md) before distributing access.
 npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
 npm test
 npm run build:macos
-npm run build:windows -- x64
-npm run build:windows -- arm64
 ```
 
-`npm test` covers the provider runtime, patch/restore engine, complete payload install, native installer contracts, Windows renderer isolation, cross-architecture packaging, and signing gates.
+`npm test` covers the provider runtime, patch/restore engine, complete payload install, and native installer contracts.
 
 Build outputs go under `build/`:
 
 ```text
 grokrouter-<version>-macos.zip
 grokrouter-<version>-macos.zip.sha256
-grokrouter-<version>-macos.dmg
-grokrouter-<version>-macos.dmg.sha256
-grokrouter-<version>-windows-x64.zip
-grokrouter-<version>-windows-x64.zip.sha256
-grokrouter-<version>-windows-arm64.zip
-grokrouter-<version>-windows-arm64.zip.sha256
-grokrouter-<version>-windows-x64-setup.exe
-grokrouter-<version>-windows-x64-setup.exe.sha256
-grokrouter-<version>-windows-arm64-setup.exe
-grokrouter-<version>-windows-arm64-setup.exe.sha256
 ```
 
-Local macOS builds are ad-hoc signed. Local Windows builds are unsigned development artifacts. The public release workflow refuses to prepare a draft unless Apple Developer ID/notarization credentials, Windows Authenticode credentials, and access to the public binary repository are configured.
+Local builds are ad-hoc signed for the Mac that built them. GrokRouter does not distribute an unsigned binary or ask viewers to bypass Gatekeeper.
 
 Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritative files, protected safety boundaries, verification commands, and fresh-Bot acceptance gate.
 
 ## Release truth
 
-Beta.39 fixed the lifecycle case where Grok replaced the live host while leaving the router runtime and config installed. It adds an exact-gated watchdog, explicit Repair action, bounded JPEG installer screenshots, redesigned GrokRouter apps, and Windows x64/Arm64 packages.
+Beta.39 fixed the lifecycle case where Grok replaced the live host while leaving the router runtime and config installed. It adds an exact-gated watchdog, explicit Repair action, bounded JPEG installer screenshots, and the redesigned GrokRouter Mac app.
 
-The exact local macOS beta.39 artifact reinstalled successfully and a genuinely new Bot passed `/router doctor` and `/provider`. Windows packages pass build and static safety checks but are not represented as live-verified. Full OpenRouter computer/sub-agent parity is also not claimed when Grok supplies no actionable outer-tool schemas.
+The exact local macOS beta.39 artifact reinstalled successfully and a genuinely new Bot passed `/router doctor` and `/provider`. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
 
 See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and the dated [Independent Review](docs/INDEPENDENT-REVIEW-2026-08-29.md) for the evidence behind every claim.
 
@@ -313,7 +289,7 @@ See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and t
 - [Fresh-Bot acceptance gate](docs/FRESH-BOT-ACCEPTANCE.md)
 - [Verification matrix](docs/TEST-MATRIX.md)
 - [Security and trust boundary](SECURITY.md)
-- [Public release procedure](docs/RELEASE.md)
+- [Source-build and release procedure](docs/RELEASE.md)
 - [OpenGrok comparison](docs/OPENGROK-COMPARISON.md)
 - [YouTube demo runbook](docs/YOUTUBE-DEMO.md)
 - [Editable 16:9 architecture diagram](docs/diagrams/grokbot-router-end-to-end.svg)
@@ -321,7 +297,7 @@ See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and t
 
 ## Current scope
 
-GrokRouter is deliberately narrow. Adding another Grok Bot version requires inspecting the untouched stock host, recording its exact hash and size, confirming every patch anchor exactly once, running the complete automated suite, and completing the live install → restore → reinstall → fresh-Bot gate on each platform.
+GrokRouter is deliberately narrow. Adding another Grok Bot version requires inspecting the untouched stock host, recording its exact hash and size, confirming every patch anchor exactly once, running the complete automated suite, and completing the live install → restore → reinstall → fresh-Bot gate on the supported Mac platform.
 
 Never add a wildcard hash. Never ship a development override. Never call a preview verified.
 

@@ -4,10 +4,10 @@ Host-replacement recovery for Grok Bot 0.30.0.
 
 Audience delivery:
 
-- Added a standard macOS DMG with a drag-to-Applications layout, Developer ID signing, notarization, stapling, and a published SHA-256.
-- Added normal per-user Windows x64 and Arm64 setup executables with Start-menu shortcuts, Authenticode signing, timestamp verification, and published SHA-256 files.
-- Added a separate public binary-download repository and a simple operating-system-aware download page while keeping the implementation repository private.
-- The signed workflow creates a draft first. A release is not made visible until the exact public artifacts pass Gatekeeper, Windows signature, install, restore, reinstall, and fresh-Bot acceptance on clean machines.
+- Made the complete source repository public with a Mac-first quick start near the top of the README.
+- Added a one-command source installer plus a double-click `Install GrokRouter.command` fallback.
+- The source installer builds the native Swift app locally, verifies it, installs it to the user's Applications folder without `sudo`, and opens it.
+- Removed distributed DMG and Windows release paths. GrokRouter currently supports Apple silicon Macs only.
 
 - Added a persistent, rate-limited watchdog that detects when Grok replaces the live patched host with an allowlisted stock host, reapplies the existing exact hash-and-anchor-gated patch, and restarts the host.
 - Added XDG desktop autostart for the watchdog. Intentional stock restore disables and removes it so Restore Stock remains authoritative.
@@ -15,7 +15,6 @@ Audience delivery:
 - Doctor now completes its credential sections and emits an explicit completion sentinel even when the host check fails, instead of stopping at the first nonzero patch status.
 - Installer OCR screenshots now use bounded JPEG capture, preventing a newly provisioned high-resolution noVNC target from failing with `Message too long`.
 - The redesigned macOS app and release archive are now named **GrokRouter**.
-- Added matching Windows x64 and Arm64 GrokRouter packages. They use the same loopback/noVNC transport, paced checksummed transfer, protected secret handoff, exact version gate, offline terminal OCR, Doctor, Repair, and verified stock restore. Windows packages remain preview-only until the exact signed artifact passes the live Windows install/restore/fresh-Bot gate.
 - The exact beta.39 artifact reinstalled on the replacement host, then passed a genuinely-new-Bot beta.39 doctor and deterministic OpenRouter Claude `/provider` receipt. The installer Doctor also completed across a target rotation without the former message-size failure, and the separate one-click Repair action completed before `/provider` passed again after its restart.
 
 Beta.38 previously added fresh-Bot usability and delivery-loop hardening:

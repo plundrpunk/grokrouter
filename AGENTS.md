@@ -12,7 +12,7 @@ Read these files in order:
 4. `docs/FRESH-BOT-ACCEPTANCE.md` for the release gate.
 5. `docs/TEST-MATRIX.md` before changing any verified claim.
 
-The main implementation is `runtime/run-provider.mjs`. `patch/router_patch.py` injects the small host executor. `remote/install.sh` installs the checksummed payload. `installer/GrokBotRouterInstaller.swift` is the native Mac installer; `installer-windows/main.cjs` is the isolated Windows delivery shell. Keep their remote transport and sentinel contracts aligned.
+The main implementation is `runtime/run-provider.mjs`. `patch/router_patch.py` injects the small host executor. `remote/install.sh` installs the checksummed payload. `installer/GrokBotRouterInstaller.swift` is the native Mac installer.
 
 ## Non-negotiable rules
 
@@ -37,4 +37,4 @@ The main implementation is `runtime/run-provider.mjs`. `patch/router_patch.py` i
 
 ## Required checks
 
-Run `npm test` after implementation changes. Run `npm run build:macos` for macOS installer or release changes and both `npm run build:windows -- x64` and `npm run build:windows -- arm64` for Windows installer or release changes. Before calling a platform build usable, install that exact artifact on that platform and complete the full fresh-Bot procedure in `docs/FRESH-BOT-ACCEPTANCE.md` from a Bot created after installation. Existing Bots, a different operating system, and a previously installed build are not substitutes.
+Run `npm test` after implementation changes. Run `npm run build:macos` for installer or release changes. Before calling a build usable, install that exact artifact on a supported Mac and complete the full fresh-Bot procedure in `docs/FRESH-BOT-ACCEPTANCE.md` from a Bot created after installation. Existing Bots and a previously installed build are not substitutes.

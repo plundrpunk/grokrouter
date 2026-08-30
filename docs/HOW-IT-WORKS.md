@@ -20,9 +20,9 @@ YouTube-ready files:
 
 ## What happens during installation
 
-The macOS and Windows installers are guided delivery mechanisms. They do not replace the Grok Bot app.
+The native macOS installer is a guided delivery mechanism. It does not replace the Grok Bot app.
 
-1. It confirms that the installed desktop app is the supported Grok Bot 0.30.0 build. Windows also checks that the official executable has a valid Authenticode signature.
+1. It confirms that the installed desktop app is the supported Grok Bot 0.30.0 build.
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.

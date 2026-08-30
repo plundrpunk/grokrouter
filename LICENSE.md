@@ -2,14 +2,14 @@
 
 Copyright 2026 Prompt Advisers. All rights reserved.
 
-Permission is granted to individuals to download and use an official,
-unmodified GrokRouter binary release for personal, non-commercial purposes.
+Permission is granted to individuals to view, copy, modify, build, and use this
+source code for personal, non-commercial purposes. You may make a private custom
+build for your own computer.
 
-The source code and custom builds remain private. They may not be copied,
-redistributed, sublicensed, sold, published, or incorporated into another
-product without written permission from Prompt Advisers. Official binary
-releases may not be mirrored or redistributed; link to the official download
-page instead.
+The source code, custom builds, and official builds may not be redistributed,
+sublicensed, sold, published, or incorporated into another product without
+written permission from Prompt Advisers. Link to the official repository
+instead.
 
 GrokRouter is provided as-is, without warranty. Use it only with the exact Grok
 Bot version named by the installer and keep the built-in stock restore path

@@ -12,14 +12,14 @@ This document is the implementation-level companion to [How it works, without th
 | Patched host executor | Decide stock versus routed path, sanitize the host payload, launch the router runtime and translate its result back into Grok's protocol | Provider implementation, long-term state or arbitrary tool execution |
 | Router runtime | Deterministic controls, stable Bot identity, provider/model state, replay protection, provider calls, transcript conversion and redacted audit | Grok's UI, permission decisions or the computer itself |
 | Codex SDK / OpenRouter | Model inference and provider-native thread state | Authority to invent a Grok tool that the host did not offer |
-| Native installer shell (macOS/Windows) | Exact compatibility checks, loopback/noVNC transport, checksummed install, provider setup, restore and cleanup | Grok account data or an unknown host build |
+| Native macOS installer shell | Exact compatibility checks, loopback/noVNC transport, checksummed install, provider setup, restore and cleanup | Grok account data or an unknown host build |
 
 ## Install and update flow
 
-1. The native installer verifies the supported Grok Bot app and exact version before opening a diagnostic session. Windows additionally requires a valid Authenticode signature on the installed Grok Bot executable.
+1. The native installer verifies the supported Grok Bot app and exact version before opening a diagnostic session.
 2. Grok Bot is restarted with Electron diagnostics bound to Mac loopback only. The installer reuses an existing noVNC computer target when possible.
 3. Accurate Vision OCR and a harmless prompt probe establish that the Bot's Terminal is open and focused. Transfer stops if that cannot be proved.
-4. The installer types a small bootstrap through the connected noVNC RFB controller. Text is paced, every retry begins with Ctrl-C, and the archive plus every payload member has an expected SHA-256. macOS uses Vision OCR for the terminal gate; Windows bundles the English Tesseract data so the same gate works offline.
+4. The installer types a small bootstrap through the connected noVNC RFB controller. Text is paced, every retry begins with Ctrl-C, and the archive plus every payload member has an expected SHA-256. macOS Vision OCR provides the terminal gate.
 5. `remote/install.sh` stages pinned Node dependencies and the router payload inside the Bot computer.
 6. `patch/router_patch.py` verifies an allowlisted stock-host SHA-256 and every source anchor exactly once. It writes a persistent verified original under `/home/box/sand-data/grokbot-router-backup/`, syntax-checks the generated JavaScript and atomically activates it.
 7. The install script prints its authoritative sentinel before restarting the host. The platform app observes that terminal output, closes the diagnostic connection and relaunches Grok Bot normally.
@@ -90,9 +90,9 @@ The project never bundles Grok Bot's proprietary host source. `router_patch.py` 
 
 - `grokbot-router disable` leaves the installed adapter in place but sends new sessions down the stock path.
 - `grokbot-router enable` resumes routing.
-- `grokbot-router repair`, or **Repair** in either installer, reapplies the adapter only when the live host passes the exact stock hash and anchor gates. It also reenables the lifecycle watchdog.
-- `grokbot-router uninstall`, or **Restore stock** in either installer, verifies the persistent stock backup, copies it over the routed host and emits the restore sentinel before a delayed restart.
-- Each installer closes its temporary loopback diagnostic session and reopens Grok Bot normally whether install or restore succeeds or fails.
+- `grokbot-router repair`, or **Repair** in GrokRouter, reapplies the adapter only when the live host passes the exact stock hash and anchor gates. It also reenables the lifecycle watchdog.
+- `grokbot-router uninstall`, or **Restore stock** in GrokRouter, verifies the persistent stock backup, copies it over the routed host and emits the restore sentinel before a delayed restart.
+- GrokRouter closes its temporary loopback diagnostic session and reopens Grok Bot normally whether install or restore succeeds or fails.
 
 The exact beta.38 artifact passed install, verified stock restore and post-restore reinstall before its final fresh-Bot routing proof. Restore is therefore part of the acceptance cycle, not an untested emergency instruction.
 

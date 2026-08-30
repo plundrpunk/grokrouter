@@ -60,7 +60,7 @@ These are recorded rather than silently treated as closed:
 | A runtime failure during a delivery-receipt invocation could show an error after a correct answer. | The normal receipt path is detected and suppressed before provider inference. The exact beta.11 live audit must still prove this on the installed host. |
 | Multiple parallel visual tool results can interleave a user image message before every tool result is present. | Deferred. OpenRouter is explicitly requested with `parallel_tool_calls: false`, and the acceptance path uses one visual call. If parallel calls are enabled later, visual follow-ups must be buffered until the result batch is complete. |
 | Provider text accompanying a tool call is not shown. | Intentional for this adapter. Showing it before the tool result recreates the status-text/permission suppression class; the final text after the completed tool round is authoritative. |
-| The repository should be frozen, committed, CI-tested, Developer-ID signed, and notarized before filming a distributable release. | Still required for release. The current artifact is an ad-hoc-signed local acceptance candidate. Commit, push, release signing, and publication require separate user authorization. |
+| The repository should be frozen, committed, CI-tested, and verified before filming a public release. | The public release now builds the native app locally from inspectable source. A future distributed binary would still require Developer ID signing, notarization, and a separate clean-machine gate. |
 
 ## Architecture conclusion
 

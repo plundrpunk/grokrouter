@@ -3,7 +3,7 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_ROOT="$PROJECT_ROOT/build"
-VERSION="$(cd "$PROJECT_ROOT" && node -p "require('./package.json').version")"
+VERSION="$(/usr/bin/plutil -extract version raw -o - "$PROJECT_ROOT/package.json")"
 STAGE_ROOT="$(mktemp -d -t grokbot-router-payload.XXXXXX)"
 PAYLOAD_ROOT="$STAGE_ROOT/grokbot-router-payload"
 
