@@ -2,6 +2,12 @@ name: Prepare signed public release
 
 on:
   workflow_dispatch:
+    inputs:
+      include_windows:
+        description: Include signed Windows preview installers in the draft
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -60,6 +66,7 @@ jobs:
           if-no-files-found: error
 
   windows:
+    if: ${{ inputs.include_windows }}
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -111,6 +118,7 @@ jobs:
 
   release:
     needs: [macos, windows]
+    if: ${{ always() && needs.macos.result == 'success' && (needs.windows.result == 'success' || needs.windows.result == 'skipped') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -131,14 +139,23 @@ jobs:
           GH_TOKEN: ${{ secrets.PUBLIC_RELEASE_TOKEN }}
         run: |
           VERSION="$(node -p "require('./package.json').version")"
+          ASSETS=(
+            release-assets/*.dmg
+            release-assets/*.dmg.sha256
+            release-assets/*-macos.zip
+            release-assets/*-macos.zip.sha256
+          )
+          if compgen -G 'release-assets/*-setup.exe' > /dev/null; then
+            ASSETS+=(
+              release-assets/*-setup.exe
+              release-assets/*-setup.exe.sha256
+              release-assets/*-windows-*.zip
+              release-assets/*-windows-*.zip.sha256
+            )
+          fi
           gh release create "v$VERSION" \
             --repo "$PUBLIC_RELEASE_REPOSITORY" \
-            release-assets/*.dmg \
-            release-assets/*.dmg.sha256 \
-            release-assets/*-setup.exe \
-            release-assets/*-setup.exe.sha256 \
-            release-assets/*.zip \
-            release-assets/*.zip.sha256 \
+            "${ASSETS[@]}" \
             --title "GrokRouter v$VERSION" \
             --notes-file RELEASE_NOTES.md \
             --draft

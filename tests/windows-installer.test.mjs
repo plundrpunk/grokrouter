@@ -82,5 +82,6 @@ test("public releases fail closed without Authenticode credentials", () => {
   assert.match(releaseWorkflow, /WINDOWS_CODESIGN_PFX_BASE64/);
   assert.match(releaseWorkflow, /PUBLIC_RELEASE_TOKEN/);
   assert.match(releaseWorkflow, /promptadvisers\/grokrouter-downloads/);
+  assert.match(releaseWorkflow, /include_windows/);
   assert.match(releaseWorkflow, /needs: \[macos, windows\]/);
 });

@@ -59,7 +59,7 @@ The Windows job signs and timestamp-verifies every packaged executable, builds t
 
 1. Update `package.json`, `runtime/package.json`, the runtime version constant, the patch version marker if necessary, `installer-windows/package.json`, lockfile root versions, and `RELEASE_NOTES.md`.
 2. Commit a clean reviewed tree on `main` and wait for CI to pass.
-3. Run **Prepare signed public release** in GitHub Actions.
+3. Run **Prepare signed public release** in GitHub Actions. Leave **Include signed Windows preview installers** off for a Mac-first release. Turn it on only when both Windows signing secrets are configured and you intend to run the Windows gate.
 4. Confirm a draft `v<version>` appears in `promptadvisers/grokrouter-downloads`. It should contain DMG, setup EXE, fallback ZIP, and SHA-256 files.
 
 ## Clean-machine release gate
@@ -87,7 +87,7 @@ Record every result in `docs/TEST-MATRIX.md`. A passing Mac run is not Windows e
 After every claim shown on the download page has passed:
 
 1. Edit the draft release in `promptadvisers/grokrouter-downloads`.
-2. Mark Windows clearly as preview if either architecture lacks its real-device gate.
+2. Mark Windows clearly as preview if either architecture lacks its real-device gate. A Mac-first release should contain no Windows binaries at all.
 3. Publish the release as the latest release.
 4. Open <https://promptadvisers.github.io/grokrouter-downloads/> in a private browser window on Mac, Windows, and mobile. Confirm the primary button resolves to the expected latest asset without a GitHub account.
 5. Use the download-page URL in the YouTube description. Do not link viewers to the private source repository, an Actions run, or an unsigned archive.
