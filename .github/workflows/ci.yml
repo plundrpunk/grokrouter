@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: runtime/package-lock.json
+      - name: Install pinned runtime dependencies
+        run: npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
+      - name: Test all layers
+        run: npm test
+      - name: Build ad-hoc beta installer
+        run: npm run build:macos
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: grokrouter-macos
+          path: |
+            build/grokrouter-*-macos.zip
+            build/grokrouter-*-macos.zip.sha256
+          if-no-files-found: error
+
+  windows-packages:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: |
+            runtime/package-lock.json
+            installer-windows/package-lock.json
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.13"
+      - name: Install pinned runtime dependencies
+        shell: bash
+        run: npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
+      - name: Test Windows-portable layers
+        shell: bash
+        run: npm run test:runtime && npm run test:windows
+      - name: Build x64 and Arm64 Windows packages
+        shell: bash
+        run: |
+          npm run build:windows -- x64
+          npm run build:windows -- arm64
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: grokrouter-windows
+          path: |
+            build/grokrouter-*-windows-x64.zip
+            build/grokrouter-*-windows-x64.zip.sha256
+            build/grokrouter-*-windows-arm64.zip
+            build/grokrouter-*-windows-arm64.zip.sha256
+          if-no-files-found: error

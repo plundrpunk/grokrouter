@@ -1,0 +1,172 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="diagram-title diagram-desc">
+  <title id="diagram-title">How GrokRouter works end to end</title>
+  <desc id="diagram-desc">A six-step non-technical flow. The user types in the unchanged Grok Bot chat. A small router reads that Bot's saved model choice and sends the turn to Codex SDK or OpenRouter. The answer returns to the same Grok Bot chat. If the selected AI needs an action, Grok's existing computer, file, or browser tools perform it and return the result. Installation verifies the exact Grok version, saves a stock backup, and can restore the original path.</desc>
+
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.28"/>
+    </filter>
+    <marker id="arrow-orange" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#FFB14A"/>
+    </marker>
+    <marker id="arrow-blue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#6EA8FF"/>
+    </marker>
+    <marker id="arrow-green" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L12,6 L0,12 Z" fill="#64D99B"/>
+    </marker>
+    <marker id="arrow-purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#8F84FF"/>
+    </marker>
+    <style>
+      .title { font: 700 68px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F7F9FC; letter-spacing: -1.5px; }
+      .subtitle { font: 400 28px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #B6BFCE; }
+      .eyebrow { font: 700 18px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 2.2px; }
+      .step { font: 700 20px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: 1.5px; }
+      .card-title { font: 700 32px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F7F9FC; }
+      .card-copy { font: 400 23px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #C7CEDA; }
+      .card-small { font: 500 18px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #AAB4C3; }
+      .pill { font: 700 19px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .strip-title { font: 700 22px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #F7F9FC; }
+      .strip-copy { font: 400 17px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #ABB5C4; }
+      .icon-stroke { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 6; }
+    </style>
+  </defs>
+
+  <rect width="1920" height="1080" fill="#0B0E14"/>
+  <circle cx="1750" cy="40" r="300" fill="#14355A" opacity="0.24"/>
+  <circle cx="180" cy="1000" r="330" fill="#4D2D14" opacity="0.20"/>
+
+  <g transform="translate(80 54)">
+    <rect width="240" height="38" rx="19" fill="#1F2A23"/>
+    <circle cx="22" cy="19" r="7" fill="#64D99B"/>
+    <text x="40" y="26" class="eyebrow" fill="#8CE6B5">WHAT STAYS THE SAME</text>
+  </g>
+  <text x="80" y="150" class="title">Grok Bot stays the same. The AI brain changes.</text>
+  <text x="80" y="198" class="subtitle">Same chat, files and computer. A small router sends each turn to the model you choose.</text>
+
+  <!-- Step 1: user and Grok Bot -->
+  <g transform="translate(80 270)" filter="url(#shadow)">
+    <rect width="345" height="350" rx="28" fill="#151A23" stroke="#3B4656" stroke-width="2"/>
+    <text x="28" y="42" class="step" fill="#64D99B">1  YOU USE GROK BOT</text>
+    <g transform="translate(104 70)">
+      <rect x="0" y="0" width="138" height="104" rx="25" fill="#202A37" stroke="#64D99B" stroke-width="4"/>
+      <path d="M30 104 L19 132 L60 105" fill="#202A37" stroke="#64D99B" stroke-width="4" stroke-linejoin="round"/>
+      <circle cx="38" cy="52" r="8" fill="#64D99B"/>
+      <circle cx="69" cy="52" r="8" fill="#64D99B"/>
+      <circle cx="100" cy="52" r="8" fill="#64D99B"/>
+    </g>
+    <text x="28" y="245" class="card-title">Type normally</text>
+    <text x="28" y="282" class="card-copy">Bots, history and the</text>
+    <text x="28" y="314" class="card-copy">chat window stay put.</text>
+  </g>
+
+  <!-- Step 2: router -->
+  <g transform="translate(505 270)" filter="url(#shadow)">
+    <rect width="360" height="350" rx="28" fill="#1E1913" stroke="#FFB14A" stroke-width="3"/>
+    <text x="28" y="42" class="step" fill="#FFB14A">2  ROUTER CHECKS</text>
+    <g transform="translate(112 70)">
+      <circle cx="68" cy="64" r="62" fill="#2E2419" stroke="#FFB14A" stroke-width="5"/>
+      <path d="M68 25 V48 M68 80 V103 M29 64 H52 M84 64 H107" class="icon-stroke" stroke="#FFB14A"/>
+      <circle cx="68" cy="64" r="16" fill="#FFB14A"/>
+      <path d="M28 32 L43 47 M93 81 L108 96 M108 32 L93 47 M43 81 L28 96" class="icon-stroke" stroke="#FFB14A"/>
+    </g>
+    <text x="28" y="245" class="card-title">Which model?</text>
+    <text x="28" y="282" class="card-copy">Each Bot remembers its</text>
+    <text x="28" y="314" class="card-copy">own provider and model.</text>
+  </g>
+
+  <!-- Step 3: chosen model -->
+  <g transform="translate(945 270)" filter="url(#shadow)">
+    <rect width="410" height="350" rx="28" fill="#141C2A" stroke="#6EA8FF" stroke-width="3"/>
+    <text x="28" y="42" class="step" fill="#6EA8FF">3  CHOSEN AI THINKS</text>
+    <g transform="translate(28 75)">
+      <rect width="168" height="52" rx="15" fill="#223A58"/>
+      <text x="84" y="34" text-anchor="middle" class="pill" fill="#A7CAFF">CODEX SDK</text>
+      <rect x="186" width="168" height="52" rx="15" fill="#2B294E"/>
+      <text x="270" y="34" text-anchor="middle" class="pill" fill="#C6BEFF">OPENROUTER</text>
+    </g>
+    <g transform="translate(152 151)">
+      <path d="M54 4 C25 4 4 24 4 52 C4 79 24 98 49 101 V126 H69 V101 C94 98 114 79 114 52 C114 24 92 4 64 4 Z" fill="#20314A" stroke="#6EA8FF" stroke-width="5"/>
+      <path d="M39 45 C39 31 49 23 61 23 M80 45 C80 31 70 23 59 23 M38 67 C38 81 49 89 61 89 M81 67 C81 81 70 89 59 89 M60 24 V88" class="icon-stroke" stroke="#A7CAFF"/>
+    </g>
+    <text x="28" y="300" class="card-copy">Claude, GPT or another</text>
+    <text x="28" y="332" class="card-copy">configured model handles the turn.</text>
+  </g>
+
+  <!-- Step 4: answer -->
+  <g transform="translate(1435 270)" filter="url(#shadow)">
+    <rect width="405" height="350" rx="28" fill="#151A23" stroke="#64D99B" stroke-width="3"/>
+    <text x="28" y="42" class="step" fill="#64D99B">4  SAME CHAT, ANSWER</text>
+    <g transform="translate(84 78)">
+      <rect x="0" y="0" width="236" height="112" rx="24" fill="#1F322A" stroke="#64D99B" stroke-width="4"/>
+      <path d="M190 110 L218 139 L210 106" fill="#1F322A" stroke="#64D99B" stroke-width="4" stroke-linejoin="round"/>
+      <path d="M38 38 H195 M38 64 H172 M38 88 H126" class="icon-stroke" stroke="#8CE6B5"/>
+    </g>
+    <text x="28" y="245" class="card-title">Nothing to relearn</text>
+    <text x="28" y="282" class="card-copy">The response appears in</text>
+    <text x="28" y="314" class="card-copy">the original Grok Bot UI.</text>
+  </g>
+
+  <!-- Main arrows -->
+  <path d="M435 445 H486" stroke="#FFB14A" stroke-width="7" fill="none" marker-end="url(#arrow-orange)"/>
+  <path d="M875 445 H926" stroke="#6EA8FF" stroke-width="7" fill="none" marker-end="url(#arrow-blue)"/>
+  <path d="M1365 445 H1416" stroke="#64D99B" stroke-width="7" fill="none" marker-end="url(#arrow-green)"/>
+
+  <!-- Optional tool loop -->
+  <g transform="translate(625 650)">
+    <rect width="730" height="170" rx="24" fill="#171823" stroke="#8F84FF" stroke-width="2"/>
+    <text x="28" y="38" class="step" fill="#B7B0FF">OPTIONAL TOOL LOOP</text>
+    <g transform="translate(28 54)">
+      <rect width="154" height="54" rx="14" fill="#272541"/>
+      <text x="77" y="35" text-anchor="middle" class="pill" fill="#D5D0FF">COMPUTER</text>
+      <rect x="171" width="126" height="54" rx="14" fill="#272541"/>
+      <text x="234" y="35" text-anchor="middle" class="pill" fill="#D5D0FF">FILES</text>
+      <rect x="314" width="142" height="54" rx="14" fill="#272541"/>
+      <text x="385" y="35" text-anchor="middle" class="pill" fill="#D5D0FF">BROWSER</text>
+    </g>
+    <text x="28" y="137" class="card-copy">Grok performs the action.</text>
+    <text x="28" y="160" class="card-small">The result returns to the chosen AI.</text>
+  </g>
+  <path d="M1190 620 V640" stroke="#8F84FF" stroke-width="6" fill="none" marker-end="url(#arrow-purple)"/>
+  <path d="M1035 650 V628" stroke="#8F84FF" stroke-width="6" fill="none" marker-end="url(#arrow-purple)"/>
+  <g transform="translate(1435 650)">
+    <rect width="405" height="170" rx="24" fill="#201918" stroke="#E58C71" stroke-width="2"/>
+    <text x="28" y="40" class="step" fill="#FFAE94">PERMISSIONS STILL APPLY</text>
+    <text x="28" y="88" class="card-copy">Only tools Grok offers for that</text>
+    <text x="28" y="120" class="card-copy">turn can be requested or approved.</text>
+  </g>
+
+  <!-- Install and restore strip -->
+  <g transform="translate(80 880)">
+    <rect width="1760" height="142" rx="25" fill="#11161E" stroke="#354052" stroke-width="2"/>
+    <text x="28" y="36" class="eyebrow" fill="#FFB14A">ONE-TIME SETUP + ONE-CLICK RECOVERY</text>
+
+    <g transform="translate(28 56)">
+      <circle cx="30" cy="31" r="28" fill="#2C2318" stroke="#FFB14A" stroke-width="3"/>
+      <text x="30" y="39" text-anchor="middle" class="strip-title" fill="#FFB14A">A</text>
+      <text x="74" y="24" class="strip-title">Verify exact Grok version</text>
+      <text x="74" y="50" class="strip-copy">Unknown build? Stop without changing anything.</text>
+    </g>
+
+    <path d="M532 88 H592" stroke="#596578" stroke-width="4" fill="none" marker-end="url(#arrow-orange)"/>
+
+    <g transform="translate(620 56)">
+      <circle cx="30" cy="31" r="28" fill="#1C2B24" stroke="#64D99B" stroke-width="3"/>
+      <path d="M19 31 L28 40 L44 22" class="icon-stroke" stroke="#64D99B" stroke-width="5"/>
+      <text x="74" y="24" class="strip-title">Save verified original</text>
+      <text x="74" y="50" class="strip-copy">Persistent stock backup stays ready.</text>
+    </g>
+
+    <path d="M1100 88 H1160" stroke="#596578" stroke-width="4" fill="none" marker-end="url(#arrow-green)"/>
+
+    <g transform="translate(1190 56)">
+      <circle cx="30" cy="31" r="28" fill="#20253A" stroke="#8F84FF" stroke-width="3"/>
+      <path d="M18 31 A13 13 0 1 0 30 18 M17 20 V33 H30" class="icon-stroke" stroke="#B7B0FF" stroke-width="4"/>
+      <text x="74" y="24" class="strip-title">Restore stock any time</text>
+      <text x="74" y="50" class="strip-copy">One click returns Grok's original inference path.</text>
+    </g>
+  </g>
+
+  <text x="1838" y="1055" text-anchor="end" class="card-small">GrokRouter · beta.39 · unofficial, reversible private beta</text>
+</svg>

@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+  SCRIPT_DIRECTORY="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  if [[ "$SCRIPT_SOURCE" != /* ]]; then
+    SCRIPT_SOURCE="$SCRIPT_DIRECTORY/$SCRIPT_SOURCE"
+  fi
+done
+INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_PATH="$INSTALL_ROOT/provider.json"
+PATCHER="$INSTALL_ROOT/patch/router_patch.py"
+CODEX_CLI="$INSTALL_ROOT/node_modules/.bin/codex"
+PATCH_ARGS=(
+  --host "${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
+  --backup "${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
+  --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
+)
+if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
+  PATCH_ARGS+=(--allow-unknown-host)
+fi
+
+usage() {
+  printf '%s\n' \
+    "GrokRouter" \
+    "" \
+    "Commands:" \
+    "  status                         Show provider configuration" \
+    "  doctor                         Verify runtime, host patch, and credentials" \
+    "  repair                         Reapply the exact-gated host patch" \
+    "  auth codex                     Start Codex device sign-in" \
+    "  provider codex|openrouter      Change the default for new Bot threads" \
+    "  model codex MODEL              Change the default Codex model" \
+    "  model openrouter vendor/model  Change the default OpenRouter model" \
+    "  enable | disable               Enable or bypass the router" \
+    "  restart                        Restart Grok Bot's host process" \
+    "  uninstall                      Restore the verified stock host" \
+    "  logs                           Show redacted recent audit events"
+}
+
+require_config() {
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    printf 'ERROR: router configuration is missing: %s\n' "$CONFIG_PATH" >&2
+    exit 1
+  fi
+}
+
+update_config() {
+  local key="$1"
+  local value="$2"
+  ROUTER_CONFIG_PATH="$CONFIG_PATH" ROUTER_CONFIG_KEY="$key" ROUTER_CONFIG_VALUE="$value" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["ROUTER_CONFIG_PATH"])
+config = json.loads(path.read_text())
+key = os.environ["ROUTER_CONFIG_KEY"]
+value = os.environ["ROUTER_CONFIG_VALUE"]
+if key in {"enabled", "autoRepair"}:
+    config[key] = value == "true"
+else:
+    config[key] = value
+temporary = path.with_suffix(".tmp")
+temporary.write_text(json.dumps(config, indent=2) + "\n")
+temporary.chmod(0o600)
+temporary.replace(path)
+PY
+}
+
+restart_host() {
+  pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true
+  printf 'Host restart requested. Grok Bot should reconnect automatically.\n'
+}
+
+watchdog_pid_file="/home/box/sand-data/grokbot-router-watchdog.pid"
+watchdog_autostart="/home/box/.config/autostart/grokbot-router-watchdog.desktop"
+
+stop_watchdog() {
+  if [[ "${ROUTER_WATCHDOG_ENABLED:-1}" == "0" ]]; then
+    return
+  fi
+  if [[ -f "$watchdog_pid_file" ]]; then
+    watchdog_pid="$(cat "$watchdog_pid_file" 2>/dev/null || true)"
+    if [[ "$watchdog_pid" =~ ^[0-9]+$ ]]; then
+      kill "$watchdog_pid" >/dev/null 2>&1 || true
+      for _ in 1 2 3 4 5 6 7 8 9 10; do
+        kill -0 "$watchdog_pid" >/dev/null 2>&1 || break
+        sleep 0.1
+      done
+    fi
+  fi
+  rm -f "$watchdog_pid_file" "$watchdog_autostart"
+  rmdir /home/box/sand-data/grokbot-router-watchdog.lock >/dev/null 2>&1 || true
+}
+
+start_watchdog() {
+  if [[ "${ROUTER_WATCHDOG_ENABLED:-1}" == "0" ]]; then
+    return
+  fi
+  stop_watchdog
+  mkdir -p "$(dirname "$watchdog_autostart")"
+  cat > "$watchdog_autostart" <<EOF
+[Desktop Entry]
+Type=Application
+Name=GrokRouter Watchdog
+Exec=$INSTALL_ROOT/bin/grokbot-router-watchdog
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+  nohup "$INSTALL_ROOT/bin/grokbot-router-watchdog" \
+    >/home/box/sand-data/grokbot-router-watchdog.log 2>&1 &
+  printf '%s\n' "$!" > "$watchdog_pid_file"
+}
+
+repair_host() {
+  require_config
+  python3 "$PATCHER" "${PATCH_ARGS[@]}" --json
+  update_config enabled true
+  update_config autoRepair true
+  start_watchdog
+  printf 'GROKBOT_ROUTER_REPAIR_OK\n'
+  printf 'Known stock host patched. Automatic repair is enabled.\n'
+  nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
+    >/dev/null 2>&1 &
+}
+
+command_name="${1:-status}"
+case "$command_name" in
+  status)
+    require_config
+    python3 - "$CONFIG_PATH" <<'PY'
+import json
+import sys
+
+config = json.load(open(sys.argv[1]))
+print(f"Enabled: {config.get('enabled') is True}")
+print(f"Automatic repair: {config.get('autoRepair') is True}")
+print(f"Default provider: {config.get('provider', 'codex')}")
+print(f"Providers: {', '.join(config.get('providers', []))}")
+print(f"Codex model: {config.get('codexModel', 'not configured')}")
+print(f"OpenRouter model: {config.get('openRouterModel', 'not configured')}")
+PY
+    ;;
+  doctor)
+    require_config
+    doctor_ok=1
+    printf 'Runtime\n'
+    printf '  Node: %s\n' "$(node -v)"
+    printf '  Provider runner: '
+    node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null && printf 'OK\n'
+    printf 'Host adapter\n'
+    if ! python3 "$PATCHER" --doctor "${PATCH_ARGS[@]}" --json; then
+      doctor_ok=0
+    fi
+    printf 'Codex\n'
+    if [[ -x "$CODEX_CLI" ]]; then
+      "$CODEX_CLI" login status 2>&1 | sed -E 's/([A-Za-z0-9._%+-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[account]/g' || true
+    else
+      printf '  CLI missing\n'
+    fi
+    printf 'OpenRouter\n'
+    python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path('/home/box/sand-data/box-secrets.json')
+try:
+    data = json.loads(path.read_text())
+    value = data.get('secrets', {}).get('OPENROUTER_API_KEY', '').strip()
+except Exception:
+    value = ''
+valid = value.startswith('sk-or-v1-') and len(value) >= 33 and not any(ch.isspace() for ch in value)
+if valid:
+    print("  Credential: configured and valid shape")
+elif value:
+    print("  Credential: present but invalid shape")
+else:
+    print("  Credential: not configured")
+PY
+    printf 'GROKBOT_ROUTER_DOCTOR_DONE\n'
+    exit "$doctor_ok"
+    ;;
+  repair)
+    repair_host
+    ;;
+  auth)
+    if [[ "${2:-}" != "codex" ]]; then
+      printf 'ERROR: supported auth command is: grokbot-router auth codex\n' >&2
+      exit 2
+    fi
+    if [[ ! -x "$CODEX_CLI" ]]; then
+      printf 'ERROR: Codex CLI is missing; reinstall the router\n' >&2
+      exit 1
+    fi
+    exec "$CODEX_CLI" login --device-auth
+    ;;
+  provider)
+    require_config
+    provider="${2:-}"
+    if [[ "$provider" != "codex" && "$provider" != "openrouter" ]]; then
+      printf 'ERROR: provider must be codex or openrouter\n' >&2
+      exit 2
+    fi
+    update_config provider "$provider"
+    printf 'Default provider for new Bot threads: %s\n' "$provider"
+    restart_host
+    ;;
+  model)
+    require_config
+    provider="${2:-}"
+    model="${3:-}"
+    if [[ -z "$model" ]]; then
+      printf 'ERROR: model requires a provider and model ID\n' >&2
+      exit 2
+    fi
+    if [[ "$provider" == "codex" ]]; then
+      update_config codexModel "$model"
+    elif [[ "$provider" == "openrouter" ]]; then
+      if [[ ! "$model" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+$ ]]; then
+        printf 'ERROR: OpenRouter models use vendor/model format\n' >&2
+        exit 2
+      fi
+      update_config openRouterModel "$model"
+    else
+      printf 'ERROR: provider must be codex or openrouter\n' >&2
+      exit 2
+    fi
+    printf '%s default model updated to %s\n' "$provider" "$model"
+    restart_host
+    ;;
+  enable)
+    require_config
+    repair_host
+    ;;
+  disable)
+    require_config
+    update_config enabled false
+    restart_host
+    ;;
+  restart)
+    restart_host
+    ;;
+  uninstall)
+    require_config
+    update_config autoRepair false
+    stop_watchdog
+    python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --json
+    update_config enabled false
+    # Emit the restore sentinel before the delayed host restart. Killing the
+    # host first can replace the VNC target before the installer sees success.
+    printf 'GROKBOT_ROUTER_UNINSTALL_OK\n'
+    printf 'The runtime and stock backup were retained for recovery.\n'
+    nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
+      >/dev/null 2>&1 &
+    ;;
+  logs)
+    if [[ -f "$INSTALL_ROOT/audit.jsonl" ]]; then
+      tail -n 50 "$INSTALL_ROOT/audit.jsonl" \
+        | sed -E 's/(sk-or-v1-|sk-[A-Za-z0-9_-]*|gh[opsu]_[A-Za-z0-9_-]+)/[REDACTED]/g'
+    else
+      printf 'No audit log exists yet.\n'
+    fi
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    printf 'ERROR: unknown command %s\n' "$command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

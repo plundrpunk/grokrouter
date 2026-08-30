@@ -1,0 +1,626 @@
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { spawn, execFile } = require("node:child_process");
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const http = require("node:http");
+const path = require("node:path");
+const { promisify } = require("node:util");
+const WebSocket = require("ws");
+const { createWorker } = require("tesseract.js");
+
+const execFileAsync = promisify(execFile);
+const SUPPORTED_GROK_VERSION = "0.30.0";
+const CDP_PORT = 19222;
+const CODEX_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
+const OPENROUTER_MODELS = new Set([
+  "anthropic/claude-sonnet-4.6",
+  "openai/gpt-5.6-sol",
+  "openai/gpt-5.6-terra",
+  "openai/gpt-5.6-luna",
+  "google/gemini-3.1-pro-preview",
+  "google/gemini-3.1-flash-lite",
+]);
+
+let mainWindow = null;
+let busy = false;
+let diagnosticsLaunched = false;
+let ocrWorkerPromise = null;
+
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+function emit(type, value) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("grokrouter:event", type === "log" ? { type, message: value } : { type, ...value });
+}
+
+function log(message) {
+  emit("log", message);
+}
+
+function setStatus(isBusy, message) {
+  emit("status", { busy: isBusy, message });
+}
+
+function errorMessage(error) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function requestJSON(url, timeoutMilliseconds = 3_000) {
+  return new Promise((resolve, reject) => {
+    const request = http.get(url, { timeout: timeoutMilliseconds }, (response) => {
+      const chunks = [];
+      response.on("data", (chunk) => chunks.push(chunk));
+      response.on("end", () => {
+        if (response.statusCode !== 200) return reject(new Error(`Local diagnostic endpoint returned HTTP ${response.statusCode}.`));
+        try {
+          resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+        } catch {
+          reject(new Error("Local diagnostic endpoint returned invalid JSON."));
+        }
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error("Local diagnostic endpoint timed out.")));
+    request.on("error", reject);
+  });
+}
+
+class CDPClient {
+  constructor(url) {
+    this.socket = new WebSocket(url, { maxPayload: 32 * 1024 * 1024 });
+    this.nextID = 1;
+    this.pending = new Map();
+    this.pendingNested = new Map();
+    this.ready = new Promise((resolve, reject) => {
+      this.socket.once("open", resolve);
+      this.socket.once("error", reject);
+    });
+    this.socket.on("message", (raw) => this.route(raw));
+    this.socket.on("close", () => this.rejectAll(new Error("Grok Bot closed its local diagnostic connection.")));
+    this.socket.on("error", (error) => this.rejectAll(error));
+  }
+
+  route(raw) {
+    let message;
+    try { message = JSON.parse(raw.toString()); } catch { return; }
+    if (message.method === "Target.receivedMessageFromTarget") {
+      const sessionID = message.params?.sessionId;
+      try {
+        const nested = JSON.parse(message.params?.message || "{}");
+        const pending = this.pendingNested.get(`${sessionID}:${nested.id}`);
+        if (pending) {
+          this.pendingNested.delete(`${sessionID}:${nested.id}`);
+          clearTimeout(pending.timer);
+          pending.resolve(nested);
+        }
+      } catch { /* ignore unrelated target traffic */ }
+      return;
+    }
+    if (Number.isInteger(message.id) && this.pending.has(message.id)) {
+      const pending = this.pending.get(message.id);
+      this.pending.delete(message.id);
+      clearTimeout(pending.timer);
+      pending.resolve(message);
+    }
+  }
+
+  rejectAll(error) {
+    for (const pending of [...this.pending.values(), ...this.pendingNested.values()]) {
+      clearTimeout(pending.timer);
+      pending.reject(error);
+    }
+    this.pending.clear();
+    this.pendingNested.clear();
+  }
+
+  responsePromise(map, key, timeoutMessage) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        map.delete(key);
+        reject(new Error(timeoutMessage));
+      }, 30_000);
+      map.set(key, { resolve, reject, timer });
+    });
+  }
+
+  result(message) {
+    if (message.error) throw new Error(`DevTools error: ${message.error.message || JSON.stringify(message.error)}`);
+    return message.result || {};
+  }
+
+  async call(method, params = {}, sessionID = null) {
+    await this.ready;
+    if (sessionID) return this.callNested(method, params, sessionID);
+    const id = this.nextID++;
+    const response = this.responsePromise(this.pending, id, `DevTools timed out while running ${method}.`);
+    this.socket.send(JSON.stringify({ id, method, params }));
+    return this.result(await response);
+  }
+
+  async callNested(method, params, sessionID) {
+    const nestedID = this.nextID++;
+    const outerID = this.nextID++;
+    const nestedResponse = this.responsePromise(
+      this.pendingNested,
+      `${sessionID}:${nestedID}`,
+      `Grok Bot's computer timed out while running ${method}.`,
+    );
+    const outerResponse = this.responsePromise(this.pending, outerID, "DevTools did not accept the nested command.");
+    this.socket.send(JSON.stringify({
+      id: outerID,
+      method: "Target.sendMessageToTarget",
+      params: { sessionId: sessionID, message: JSON.stringify({ id: nestedID, method, params }) },
+    }));
+    this.result(await outerResponse);
+    return this.result(await nestedResponse);
+  }
+
+  close() {
+    this.socket.close();
+  }
+}
+
+function knownGrokPaths() {
+  const candidates = [];
+  const roots = [
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs"),
+    process.env.LOCALAPPDATA,
+    process.env.ProgramW6432,
+    process.env.ProgramFiles,
+    process.env["ProgramFiles(x86)"],
+  ].filter(Boolean);
+  for (const root of roots) {
+    candidates.push(path.join(root, "Grok Bot", "Grok Bot.exe"));
+    candidates.push(path.join(root, "GrokBot", "Grok Bot.exe"));
+  }
+  return [...new Set(candidates)];
+}
+
+async function locateAndValidateGrok() {
+  if (process.platform !== "win32") throw new Error("This GrokRouter build runs only on Windows.");
+  const executable = knownGrokPaths().find((candidate) => fs.existsSync(candidate));
+  if (!executable) throw new Error("Install the official Grok Bot app from the Windows Start-menu installer first.");
+
+  const escaped = executable.replaceAll("'", "''");
+  const command = [
+    `$file = Get-Item -LiteralPath '${escaped}'`,
+    `$signature = Get-AuthenticodeSignature -LiteralPath '${escaped}'`,
+    `[pscustomobject]@{Version=$file.VersionInfo.ProductVersion;Status=[string]$signature.Status} | ConvertTo-Json -Compress`,
+  ].join("; ");
+  let metadata;
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], { windowsHide: true });
+    metadata = JSON.parse(stdout.trim());
+  } catch {
+    throw new Error("GrokRouter could not verify the installed Grok Bot Windows app.");
+  }
+  if (metadata.Status !== "Valid") throw new Error("The installed Grok Bot executable does not have a valid Windows signature. Nothing was changed.");
+  const version = String(metadata.Version || "").trim();
+  if (version !== SUPPORTED_GROK_VERSION && version !== `${SUPPORTED_GROK_VERSION}.0`) {
+    throw new Error(`Grok Bot ${version || "unknown"} is not supported. This beta is pinned to ${SUPPORTED_GROK_VERSION} and will not patch an unknown build.`);
+  }
+  return executable;
+}
+
+async function stopGrok() {
+  const graceful = "Get-Process -Name 'Grok Bot' -ErrorAction SilentlyContinue | ForEach-Object { [void]$_.CloseMainWindow() }";
+  await execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", graceful], { windowsHide: true }).catch(() => {});
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const { stdout = "" } = await execFileAsync("tasklist.exe", ["/FI", "IMAGENAME eq Grok Bot.exe", "/NH"], { windowsHide: true }).catch(() => ({ stdout: "" }));
+    if (!stdout.toLowerCase().includes("grok bot.exe")) return;
+    await delay(125);
+  }
+  await execFileAsync("taskkill.exe", ["/F", "/T", "/IM", "Grok Bot.exe"], { windowsHide: true }).catch(() => {});
+  await delay(500);
+}
+
+function launchDetached(executable, args = []) {
+  const child = spawn(executable, args, { detached: true, stdio: "ignore", windowsHide: false });
+  child.unref();
+}
+
+async function browserWebSocketURL() {
+  const value = await requestJSON(`http://127.0.0.1:${CDP_PORT}/json/version`);
+  if (typeof value.webSocketDebuggerUrl !== "string") throw new Error("Grok Bot's diagnostic endpoint is unavailable.");
+  return value.webSocketDebuggerUrl;
+}
+
+async function relaunchWithDiagnostics(executable) {
+  log(`Verified signed Grok Bot ${SUPPORTED_GROK_VERSION}. Restarting with a local diagnostic port…`);
+  await stopGrok();
+  if (await browserWebSocketURL().then(() => true).catch(() => false)) {
+    throw new Error(`Local port ${CDP_PORT} is already in use. Close the application using it and retry.`);
+  }
+  launchDetached(executable, [`--remote-debugging-address=127.0.0.1`, `--remote-debugging-port=${CDP_PORT}`]);
+  diagnosticsLaunched = true;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (await browserWebSocketURL().then(() => true).catch(() => false)) return;
+    await delay(250);
+  }
+  throw new Error("Grok Bot's local diagnostic connection did not become ready.");
+}
+
+async function relaunchNormallyIfNeeded(executable) {
+  const endpointOpen = await browserWebSocketURL().then(() => true).catch(() => false);
+  if (!diagnosticsLaunched && !endpointOpen) return;
+  log("Closing the temporary diagnostic port and reopening Grok Bot normally…");
+  await stopGrok();
+  try { launchDetached(executable); } catch { log("Grok Bot did not reopen automatically. Open it normally from the Start menu."); }
+  diagnosticsLaunched = false;
+}
+
+async function targets(client) {
+  const result = await client.call("Target.getTargets");
+  return (result.targetInfos || []).map((item) => ({
+    id: item.targetId,
+    type: item.type || "",
+    title: item.title || "",
+    url: item.url || "",
+  }));
+}
+
+async function attach(client, targetID) {
+  const result = await client.call("Target.attachToTarget", { targetId: targetID, flatten: false });
+  if (!result.sessionId) throw new Error("Could not attach to Grok Bot's computer session.");
+  return result.sessionId;
+}
+
+async function mainPageSession(client) {
+  const page = (await targets(client)).find((item) => item.type === "page" && item.url.includes("/renderer/index.html"));
+  if (!page) throw new Error("Grok Bot's main window was not found.");
+  return attach(client, page.id);
+}
+
+async function evaluate(client, sessionID, expression) {
+  const response = await client.call("Runtime.evaluate", {
+    expression,
+    awaitPromise: true,
+    returnByValue: true,
+  }, sessionID);
+  if (response.exceptionDetails) throw new Error("Grok Bot rejected a local installer command.");
+  return response;
+}
+
+async function saveOpenRouterKey(key, client, pageSession) {
+  if (!key) return;
+  log("Saving OPENROUTER_API_KEY through Grok Bot's protected Secrets store…");
+  const response = await evaluate(
+    client,
+    pageSession,
+    `window.desktop.secrets.upsert({OPENROUTER_API_KEY:${JSON.stringify(key)}}).then(()=>({saved:true}))`,
+  );
+  if (response.result?.value?.saved !== true) throw new Error("Grok Bot did not confirm that its protected secret was saved.");
+}
+
+async function tryOpenComputer(client, pageSession) {
+  const script = `(() => { const buttons = [...document.querySelectorAll('button')]; const button = buttons.find((item) => /open computer/i.test(item.textContent || item.getAttribute('aria-label') || '')); if (!button) return false; button.click(); return true; })()`;
+  await evaluate(client, pageSession, script).catch(() => {});
+}
+
+async function waitForVNC(client, pageSession) {
+  log("Waiting for a Bot computer. If Grok Bot does not open it automatically, select any Bot and click Open computer…");
+  for (let index = 0; index < 360; index += 1) {
+    const vnc = (await targets(client)).find((item) => item.type === "webview" && item.url.includes("/vnc.html"));
+    if (vnc) return { targetID: vnc.id, sessionID: await attach(client, vnc.id) };
+    if (index % 20 === 0) await tryOpenComputer(client, pageSession);
+    await delay(500);
+  }
+  throw new Error("No Bot computer appeared. Open one in Grok Bot and try again.");
+}
+
+function keySym(virtualKey, key) {
+  if (virtualKey === 13) return 0xff0d;
+  if (virtualKey === 17) return 0xffe3;
+  if (virtualKey === 18) return 0xffe9;
+  if ([...key].length === 1) return key.codePointAt(0);
+  throw new Error("The Bot computer received an unsupported key event.");
+}
+
+async function keyEvent(client, sessionID, type, key, code, virtualKey) {
+  const expression = `(async () => { const UI = (await import('./app/ui.js')).default; if (!UI?.rfb) return false; UI.rfb.sendKey(${keySym(virtualKey, key)}, ${JSON.stringify(code)}, ${type === "keyDown"}); return true; })()`;
+  const response = await evaluate(client, sessionID, expression);
+  if (response.result?.value !== true) throw new Error("The Bot computer did not accept a noVNC key event.");
+}
+
+async function clickRemoteCanvas(client, sessionID, x, y) {
+  const expression = `(async () => { const UI = (await import('./app/ui.js')).default; const canvas = document.querySelector('#noVNC_container canvas') || document.querySelector('canvas'); if (!UI?.rfb || !canvas) return false; const rect = canvas.getBoundingClientRect(); const localX = ${x} - rect.left; const localY = ${y} - rect.top; UI.rfb._handleMouseButton(localX, localY, 1); UI.rfb._handleMouseButton(localX, localY, 0); return true; })()`;
+  const response = await evaluate(client, sessionID, expression);
+  if (response.result?.value !== true) throw new Error("The Bot computer did not accept a noVNC pointer event.");
+}
+
+async function clickRemoteDesktop(client, sessionID, remoteX, remoteY) {
+  const expression = `(() => { const canvas = document.getElementById('noVNC_canvas') || document.querySelector('canvas'); const surface = canvas || document.getElementById('noVNC_container') || document.documentElement; const rect = surface.getBoundingClientRect(); const framebufferWidth = Number(canvas?.width) || 1280; const framebufferHeight = Number(canvas?.height) || 800; return JSON.stringify({x: rect.left + (${remoteX} / framebufferWidth) * rect.width, y: rect.top + (${remoteY} / framebufferHeight) * rect.height}); })()`;
+  const response = await evaluate(client, sessionID, expression);
+  let point;
+  try { point = JSON.parse(response.result?.value); } catch { throw new Error("The Bot computer canvas could not be mapped for keyboard input."); }
+  if (!Number.isFinite(point?.x) || !Number.isFinite(point?.y)) throw new Error("The Bot computer canvas could not be mapped for keyboard input.");
+  await clickRemoteCanvas(client, sessionID, Math.round(point.x), Math.round(point.y));
+}
+
+async function openTerminal(client, sessionID) {
+  await clickRemoteDesktop(client, sessionID, 400, 400);
+  await evaluate(client, sessionID, "document.getElementById('noVNC_keyboardinput')?.focus(); true").catch(() => {});
+  await keyEvent(client, sessionID, "keyDown", "Control", "ControlLeft", 17);
+  await keyEvent(client, sessionID, "keyDown", "Alt", "AltLeft", 18);
+  await keyEvent(client, sessionID, "keyDown", "t", "KeyT", 84);
+  await keyEvent(client, sessionID, "keyUp", "t", "KeyT", 84);
+  await keyEvent(client, sessionID, "keyUp", "Alt", "AltLeft", 18);
+  await keyEvent(client, sessionID, "keyUp", "Control", "ControlLeft", 17);
+  await delay(1_200);
+  await focusTerminal(client, sessionID);
+}
+
+function languagePath() {
+  return path.dirname(require.resolve("@tesseract.js-data/eng/4.0.0_best_int/eng.traineddata.gz"));
+}
+
+async function ocrWorker() {
+  if (!ocrWorkerPromise) {
+    const cachePath = path.join(app.getPath("userData"), "ocr-cache");
+    fs.mkdirSync(cachePath, { recursive: true });
+    ocrWorkerPromise = createWorker("eng", 1, { langPath: languagePath(), cachePath });
+  }
+  return ocrWorkerPromise;
+}
+
+async function screenshotText(client, sessionID) {
+  const result = await client.call("Page.captureScreenshot", {
+    format: "jpeg",
+    quality: 55,
+    fromSurface: true,
+    optimizeForSpeed: true,
+  }, sessionID);
+  if (typeof result.data !== "string") return "";
+  const worker = await ocrWorker();
+  const recognized = await worker.recognize(Buffer.from(result.data, "base64"));
+  return recognized.data?.text || "";
+}
+
+function normalizeOCR(value) {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+async function waitForTerminalPrompt(client, sessionID, attempts = 8) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const normalized = normalizeOCR(await screenshotText(client, sessionID).catch(() => ""));
+    if (normalized.includes("TERMINAL") && (normalized.includes("WORKSPACE") || normalized.includes("BOXCURSOR"))) return true;
+    await delay(500);
+  }
+  return false;
+}
+
+async function focusTerminal(client, sessionID) {
+  await clickRemoteDesktop(client, sessionID, 400, 250);
+  await evaluate(client, sessionID, "document.getElementById('noVNC_keyboardinput')?.focus(); true").catch(() => {});
+}
+
+async function ensureTerminal(client, sessionID) {
+  if (await waitForTerminalPrompt(client, sessionID, 2)) return focusTerminal(client, sessionID);
+  await openTerminal(client, sessionID);
+  if (await waitForTerminalPrompt(client, sessionID, 24)) return focusTerminal(client, sessionID);
+  log("The terminal shortcut missed. Opening Terminal from the Bot desktop dock…");
+  await clickRemoteDesktop(client, sessionID, 700, 768);
+  await delay(1_200);
+  await focusTerminal(client, sessionID);
+  if (!(await waitForTerminalPrompt(client, sessionID, 24))) {
+    throw new Error("The Bot terminal did not open from its shortcut or dock. Open the Bot computer and retry.");
+  }
+}
+
+async function resetRemotePrompt(client, sessionID) {
+  await keyEvent(client, sessionID, "keyDown", "Control", "ControlLeft", 17);
+  await keyEvent(client, sessionID, "keyDown", "c", "KeyC", 67);
+  await keyEvent(client, sessionID, "keyUp", "c", "KeyC", 67);
+  await keyEvent(client, sessionID, "keyUp", "Control", "ControlLeft", 17);
+  await delay(200);
+}
+
+async function typeRemoteCommand(command, client, sessionID) {
+  for (let index = 0; index < command.length; index += 4_000) {
+    const chunk = command.slice(index, index + 4_000);
+    const expression = `(async () => { const UI = (await import('./app/ui.js')).default; if (!UI?.rfb) return false; let emitted = 0; for (const character of ${JSON.stringify(chunk)}) { UI.rfb.sendKey(character.codePointAt(0)); emitted += 1; if (emitted % 8 === 0) await new Promise(resolve => setTimeout(resolve, 4)); } await new Promise(resolve => setTimeout(resolve, 20)); return true; })()`;
+    const response = await evaluate(client, sessionID, expression);
+    if (response.result?.value !== true) throw new Error("The Bot computer did not accept noVNC text input.");
+  }
+  await keyEvent(client, sessionID, "keyDown", "Enter", "Enter", 13);
+  await keyEvent(client, sessionID, "keyUp", "Enter", "Enter", 13);
+}
+
+async function typeRemoteCommandsResilient(commands, client, pageSession) {
+  if (!commands.length) throw new Error("The installer generated no remote commands.");
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const vnc = await waitForVNC(client, pageSession);
+      await ensureTerminal(client, vnc.sessionID);
+      await resetRemotePrompt(client, vnc.sessionID);
+      for (const command of commands) {
+        await typeRemoteCommand(command, client, vnc.sessionID);
+        await delay(150);
+      }
+      return vnc;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) log(`The Bot computer changed during transfer. Retrying safely (${attempt + 1}/3)…`);
+    }
+  }
+  throw lastError || new Error("The Bot terminal did not acknowledge the install command.");
+}
+
+async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds) {
+  const expected = normalizeOCR(sentinel);
+  let activeTargetID = initialVNC.targetID;
+  let activeSession = initialVNC.sessionID;
+  let reportedReconnect = false;
+  const deadline = Date.now() + timeoutSeconds * 1_000;
+  while (Date.now() < deadline) {
+    await delay(3_000);
+    const current = (await targets(client).catch(() => [])).find((item) => item.type === "webview" && item.url.includes("/vnc.html"));
+    if (current && current.id !== activeTargetID) {
+      activeTargetID = current.id;
+      activeSession = await attach(client, current.id);
+      if (!reportedReconnect) { log("The Bot computer reconnected. Continuing completion verification…"); reportedReconnect = true; }
+    }
+    const normalized = normalizeOCR(await screenshotText(client, activeSession).catch(() => ""));
+    if (normalized.includes(expected)) return;
+    if (normalized.includes("ERROR") && !normalized.includes("NOERROR")) log("The terminal displayed an error. Waiting briefly in case the installer recovered…");
+  }
+  throw new Error("The Bot terminal did not report completion. Run grokbot-router doctor there for the exact diagnostic.");
+}
+
+function payloadPath() {
+  const candidate = path.join(app.getAppPath(), "assets", "grokbot-router-payload.tgz");
+  if (!fs.existsSync(candidate)) throw new Error("Installer payload is missing.");
+  return candidate;
+}
+
+function validatedInstallOptions(raw) {
+  const providers = Array.isArray(raw.providers) ? [...new Set(raw.providers)] : [];
+  if (!providers.length || providers.some((item) => item !== "codex" && item !== "openrouter")) throw new Error("Choose Codex SDK, OpenRouter, or both.");
+  if (!providers.includes(raw.defaultProvider)) throw new Error("The default provider must be enabled.");
+  if (!CODEX_MODELS.has(raw.codexModel)) throw new Error("Choose a packaged Codex model.");
+  if (!OPENROUTER_MODELS.has(raw.openRouterModel)) throw new Error("Choose a packaged OpenRouter model.");
+  const openRouterKey = typeof raw.openRouterKey === "string" ? raw.openRouterKey.trim() : "";
+  if (openRouterKey && (!openRouterKey.startsWith("sk-or-v1-") || openRouterKey.length < 33 || /\s/.test(openRouterKey))) {
+    throw new Error("The OpenRouter key does not have the expected shape.");
+  }
+  return { defaultProvider: raw.defaultProvider, providers, codexModel: raw.codexModel, openRouterModel: raw.openRouterModel, openRouterKey };
+}
+
+async function installRouter(executable, rawOptions) {
+  const options = validatedInstallOptions(rawOptions);
+  await relaunchWithDiagnostics(executable);
+  const client = new CDPClient(await browserWebSocketURL());
+  try {
+    const pageSession = await mainPageSession(client);
+    if (options.providers.includes("openrouter")) {
+      if (options.openRouterKey) await saveOpenRouterKey(options.openRouterKey, client, pageSession);
+      else log("No OpenRouter key entered. Keeping any existing OPENROUTER_API_KEY in Grok Bot Secrets.");
+    }
+    log("Verifying that keyboard input is isolated to the Bot terminal…");
+    const transportPayload = Buffer.from("\nGROKBOT_ROUTER_TRANSPORT_OK\n").toString("base64");
+    const transportVNC = await typeRemoteCommandsResilient([`printf %s ${transportPayload} | base64 -d`], client, pageSession);
+    log("Connected to the Bot computer without Windows Accessibility permissions.");
+    await waitForSentinel("GROKBOT_ROUTER_TRANSPORT_OK", client, transportVNC, 30);
+    log("Terminal transport verified.");
+
+    const archive = fs.readFileSync(payloadPath());
+    const encoded = archive.toString("base64");
+    const digest = crypto.createHash("sha256").update(archive).digest("hex");
+    const installPayload = Buffer.from("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n").toString("base64");
+    const chunks = [];
+    for (let index = 0; index < encoded.length; index += 1_000) chunks.push(encoded.slice(index, index + 1_000));
+    const commands = ["mkdir -p /tmp/grokbot-router-installer", ": > /tmp/grokbot-router-installer/payload.b64"];
+    commands.push(...chunks.map((chunk) => `printf %s ${chunk} >> /tmp/grokbot-router-installer/payload.b64`));
+    commands.push(
+      "base64 -d /tmp/grokbot-router-installer/payload.b64 > /tmp/grokbot-router-installer/payload.tgz",
+      `echo ${digest} /tmp/grokbot-router-installer/payload.tgz | sha256sum -c -`,
+      "rm -rf /tmp/grokbot-router-installer/payload",
+      "mkdir -p /tmp/grokbot-router-installer/payload",
+      "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
+      `bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel} && clear && printf %s ${installPayload} | base64 -d`,
+    );
+    log("Transferring a SHA-256-verified payload into the Bot computer…");
+    const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);
+    log("Installing pinned dependencies and applying the reversible host adapter…");
+    await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client, installVNC, 360);
+    log("The Bot computer reported a successful install.");
+    await evaluate(client, pageSession, "window.desktop.forceGatewayReconnect().then(()=>true)").catch(() => {});
+    if (options.defaultProvider === "openrouter") return "Installed with OpenRouter selected. Send /router doctor in Grok Bot.";
+    if (options.providers.includes("codex")) return "Installed. Click Codex sign-in, then send /router doctor in Grok Bot.";
+    return "Installed. Send /router doctor in Grok Bot to verify the selected model.";
+  } finally {
+    client.close();
+  }
+}
+
+const REMOTE_ACTIONS = Object.freeze({
+  auth: { command: "/home/box/.local/bin/grokbot-router auth codex", sentinel: "Welcome to Codex", message: "Codex sign-in is visible in the Bot terminal. Complete the displayed device flow." },
+  doctor: { command: "/home/box/.local/bin/grokbot-router doctor", sentinel: "GROKBOT_ROUTER_DOCTOR_DONE", message: "Router Doctor completed in the Bot terminal." },
+  repair: { command: "/home/box/.local/bin/grokbot-router repair", sentinel: "GROKBOT_ROUTER_REPAIR_OK", message: "Router repaired. Automatic repair is enabled. Send /provider in Grok Bot." },
+  uninstall: { command: "/home/box/.local/bin/grokbot-router uninstall", sentinel: "GROKBOT_ROUTER_UNINSTALL_OK", message: "Restore command sent. Grok Bot will reconnect to its stock host." },
+});
+
+async function sendRemoteAction(executable, action) {
+  if (!(await browserWebSocketURL().then(() => true).catch(() => false))) await relaunchWithDiagnostics(executable);
+  const client = new CDPClient(await browserWebSocketURL());
+  try {
+    const pageSession = await mainPageSession(client);
+    const descriptor = REMOTE_ACTIONS[action];
+    const vnc = await typeRemoteCommandsResilient([descriptor.command], client, pageSession);
+    await waitForSentinel(descriptor.sentinel, client, vnc, 45);
+    return descriptor.message;
+  } finally {
+    client.close();
+  }
+}
+
+async function runAction(action, payload) {
+  const executable = await locateAndValidateGrok();
+  try {
+    return action === "install" ? await installRouter(executable, payload) : await sendRemoteAction(executable, action);
+  } finally {
+    await relaunchNormallyIfNeeded(executable);
+  }
+}
+
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 880,
+    height: 900,
+    minWidth: 680,
+    minHeight: 760,
+    show: false,
+    backgroundColor: "#0e0f10",
+    title: "GrokRouter",
+    icon: path.join(__dirname, "assets", "grokrouter-mascot.png"),
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  mainWindow.loadFile(path.join(__dirname, "index.html"));
+  mainWindow.once("ready-to-show", () => {
+    mainWindow.show();
+    mainWindow.focus();
+    app.focus({ steal: true });
+  });
+  mainWindow.on("close", (event) => {
+    if (!busy) return;
+    event.preventDefault();
+    setStatus(true, "Finish or stop the current installer operation before closing GrokRouter.");
+  });
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    if (!url.startsWith("file://")) { event.preventDefault(); shell.openExternal(url).catch(() => {}); }
+  });
+}
+
+ipcMain.handle("grokrouter:run", async (event, request) => {
+  if (!event.senderFrame.url.startsWith("file://")) return { ok: false, error: "Installer request was rejected." };
+  const action = request?.action;
+  if (action !== "install" && !Object.hasOwn(REMOTE_ACTIONS, action)) return { ok: false, error: "Unknown installer action." };
+  if (busy) return { ok: false, error: "Another installer operation is already running." };
+  busy = true;
+  try {
+    const message = await runAction(action, request?.payload || {});
+    log(`✓ ${message}`);
+    setStatus(false, message);
+    return { ok: true };
+  } catch (error) {
+    const detail = errorMessage(error);
+    log(`✗ ${detail}`);
+    setStatus(false, `Stopped: ${detail}`);
+    return { ok: false, error: detail };
+  } finally {
+    busy = false;
+  }
+});
+
+app.whenReady().then(createWindow);
+app.on("window-all-closed", () => app.quit());
+app.on("before-quit", () => {
+  if (ocrWorkerPromise) ocrWorkerPromise.then((worker) => worker.terminate()).catch(() => {});
+});

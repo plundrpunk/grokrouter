@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -u
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+  SCRIPT_DIRECTORY="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  if [[ "$SCRIPT_SOURCE" != /* ]]; then
+    SCRIPT_SOURCE="$SCRIPT_DIRECTORY/$SCRIPT_SOURCE"
+  fi
+done
+INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+CONFIG_PATH="$INSTALL_ROOT/provider.json"
+PATCHER="$INSTALL_ROOT/patch/router_patch.py"
+MANIFEST="$INSTALL_ROOT/patch/manifests/0.30.0.json"
+HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
+BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
+LOCK_DIR="/home/box/sand-data/grokbot-router-watchdog.lock"
+LOG_PATH="/home/box/sand-data/grokbot-router-watchdog-events.log"
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+  exit 0
+fi
+trap 'rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
+trap 'rmdir "$LOCK_DIR" 2>/dev/null || true; exit 0' INT TERM
+
+log_event() {
+  printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_PATH"
+}
+
+auto_repair_enabled() {
+  python3 - "$CONFIG_PATH" <<'PY' >/dev/null 2>&1
+import json
+import sys
+
+try:
+    config = json.load(open(sys.argv[1]))
+except Exception:
+    raise SystemExit(1)
+raise SystemExit(0 if config.get("enabled") is True and config.get("autoRepair") is True else 1)
+PY
+}
+
+repair_count=0
+repair_window_start="$(date +%s)"
+while true; do
+  sleep 5
+  auto_repair_enabled || continue
+  if python3 "$PATCHER" --doctor --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json >/dev/null 2>&1; then
+    repair_count=0
+    repair_window_start="$(date +%s)"
+    continue
+  fi
+
+  now="$(date +%s)"
+  if (( now - repair_window_start > 300 )); then
+    repair_count=0
+    repair_window_start="$now"
+  fi
+  if (( repair_count >= 3 )); then
+    log_event "repair-paused-rate-limit"
+    sleep 300
+    repair_count=0
+    repair_window_start="$(date +%s)"
+    continue
+  fi
+
+  if python3 "$PATCHER" --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json >/dev/null 2>&1; then
+    repair_count=$((repair_count + 1))
+    log_event "known-stock-host-repaired"
+    pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true
+    sleep 15
+  else
+    # Unknown hashes and missing anchors remain untouched. Retry slowly in case
+    # Grok is still staging a known stock host.
+    log_event "repair-refused-unknown-or-incomplete-host"
+    sleep 60
+  fi
+done

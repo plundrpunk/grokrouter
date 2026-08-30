@@ -1,0 +1,330 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROUTER_VERSION="0.1.0-beta.39"
+PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALL_ROOT="/home/box/sand-data/grokbot-router"
+INSTALL_PARENT="/home/box/sand-data"
+DEFAULT_PROVIDER="codex"
+CODEX_MODEL="gpt-5.6-sol"
+OPENROUTER_MODEL="anthropic/claude-sonnet-4.6"
+ENABLED_PROVIDERS="codex,openrouter"
+PROVIDER_EXPLICIT=0
+PROVIDERS_EXPLICIT=0
+CODEX_MODEL_EXPLICIT=0
+OPENROUTER_MODEL_EXPLICIT=0
+START_WATCHDOG=1
+
+usage() {
+  printf '%s\n' \
+    "GrokRouter installer ${ROUTER_VERSION}" \
+    "" \
+    "Usage: install.sh [options]" \
+    "  --provider codex|openrouter" \
+    "  --providers codex|openrouter|codex,openrouter" \
+    "  --codex-model MODEL" \
+    "  --openrouter-model vendor/model" \
+    "  --install-root PATH          Development/testing only" \
+    "  --no-restart                 Do not restart the Grok host"
+}
+
+RESTART_HOST=1
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --provider)
+      DEFAULT_PROVIDER="${2:?missing provider}"
+      PROVIDER_EXPLICIT=1
+      shift 2
+      ;;
+    --providers)
+      ENABLED_PROVIDERS="${2:?missing providers}"
+      PROVIDERS_EXPLICIT=1
+      shift 2
+      ;;
+    --codex-model)
+      CODEX_MODEL="${2:?missing Codex model}"
+      CODEX_MODEL_EXPLICIT=1
+      shift 2
+      ;;
+    --openrouter-model)
+      OPENROUTER_MODEL="${2:?missing OpenRouter model}"
+      OPENROUTER_MODEL_EXPLICIT=1
+      shift 2
+      ;;
+    --install-root)
+      INSTALL_ROOT="${2:?missing install root}"
+      INSTALL_PARENT="$(dirname "$INSTALL_ROOT")"
+      START_WATCHDOG=0
+      shift 2
+      ;;
+    --no-restart)
+      RESTART_HOST=0
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      printf 'ERROR: unknown option %s\n' "$1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ "$DEFAULT_PROVIDER" != "codex" && "$DEFAULT_PROVIDER" != "openrouter" ]]; then
+  printf 'ERROR: --provider must be codex or openrouter\n' >&2
+  exit 2
+fi
+if [[ ! "$OPENROUTER_MODEL" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+$ ]]; then
+  printf 'ERROR: --openrouter-model must use vendor/model format\n' >&2
+  exit 2
+fi
+if [[ "$ENABLED_PROVIDERS" != "codex" && "$ENABLED_PROVIDERS" != "openrouter" && "$ENABLED_PROVIDERS" != "codex,openrouter" && "$ENABLED_PROVIDERS" != "openrouter,codex" ]]; then
+  printf 'ERROR: --providers must be codex, openrouter, or codex,openrouter\n' >&2
+  exit 2
+fi
+
+for command_name in node npm python3 sha256sum; do
+  if ! command -v "$command_name" >/dev/null 2>&1; then
+    printf 'ERROR: required command is missing: %s\n' "$command_name" >&2
+    exit 1
+  fi
+done
+
+NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
+if (( NODE_MAJOR < 18 )); then
+  printf 'ERROR: Node.js 18 or newer is required; found %s\n' "$(node -v)" >&2
+  exit 1
+fi
+
+mkdir -p "$INSTALL_PARENT"
+STAGE_ROOT="$(mktemp -d "$INSTALL_PARENT/.grokbot-router-stage.XXXXXX")"
+PREVIOUS_ROOT=""
+cleanup() {
+  if [[ -d "$STAGE_ROOT" ]]; then
+    rm -rf "$STAGE_ROOT"
+  fi
+}
+trap cleanup EXIT
+
+printf '[1/6] Validating payload\n'
+if [[ ! -f "$PAYLOAD_ROOT/SHA256SUMS" ]]; then
+  printf 'ERROR: payload integrity manifest is missing\n' >&2
+  exit 1
+fi
+(cd "$PAYLOAD_ROOT" && sha256sum -c SHA256SUMS >/dev/null)
+for required in \
+  "$PAYLOAD_ROOT/runtime/run-provider.mjs" \
+  "$PAYLOAD_ROOT/runtime/package.json" \
+  "$PAYLOAD_ROOT/runtime/package-lock.json" \
+  "$PAYLOAD_ROOT/runtime/provider.default.json" \
+  "$PAYLOAD_ROOT/patch/router_patch.py" \
+  "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" \
+  "$PAYLOAD_ROOT/remote/grokbot-router" \
+  "$PAYLOAD_ROOT/remote/grokbot-router-watchdog"; do
+  if [[ ! -f "$required" ]]; then
+    printf 'ERROR: payload is incomplete: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+
+printf '[2/6] Preparing isolated runtime\n'
+cp "$PAYLOAD_ROOT/runtime/run-provider.mjs" "$STAGE_ROOT/run-provider.mjs"
+cp "$PAYLOAD_ROOT/runtime/package.json" "$STAGE_ROOT/package.json"
+cp "$PAYLOAD_ROOT/runtime/package-lock.json" "$STAGE_ROOT/package-lock.json"
+cp "$PAYLOAD_ROOT/runtime/provider.default.json" "$STAGE_ROOT/provider.json"
+mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin"
+cp "$PAYLOAD_ROOT/patch/router_patch.py" "$STAGE_ROOT/patch/router_patch.py"
+cp "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" "$STAGE_ROOT/patch/manifests/0.30.0.json"
+cp "$PAYLOAD_ROOT/remote/grokbot-router" "$STAGE_ROOT/bin/grokbot-router"
+cp "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" "$STAGE_ROOT/bin/grokbot-router-watchdog"
+chmod 700 "$STAGE_ROOT/bin/grokbot-router" "$STAGE_ROOT/bin/grokbot-router-watchdog" "$STAGE_ROOT/patch/router_patch.py"
+
+if [[ -f "$INSTALL_ROOT/provider.json" ]]; then
+  cp "$INSTALL_ROOT/provider.json" "$STAGE_ROOT/provider.json"
+elif [[ -f "/home/box/sand-data/grok-sdk-runtime/provider.json" ]]; then
+  cp "/home/box/sand-data/grok-sdk-runtime/provider.json" "$STAGE_ROOT/provider.json"
+fi
+
+ROUTER_CONFIG_PATH="$STAGE_ROOT/provider.json" \
+ROUTER_DEFAULT_CONFIG_PATH="$PAYLOAD_ROOT/runtime/provider.default.json" \
+ROUTER_INSTALL_ROOT="$INSTALL_ROOT" \
+ROUTER_PROVIDER="$DEFAULT_PROVIDER" \
+ROUTER_PROVIDER_EXPLICIT="$PROVIDER_EXPLICIT" \
+ROUTER_PROVIDERS="$ENABLED_PROVIDERS" \
+ROUTER_PROVIDERS_EXPLICIT="$PROVIDERS_EXPLICIT" \
+ROUTER_CODEX_MODEL="$CODEX_MODEL" \
+ROUTER_CODEX_MODEL_EXPLICIT="$CODEX_MODEL_EXPLICIT" \
+ROUTER_OPENROUTER_MODEL="$OPENROUTER_MODEL" \
+ROUTER_OPENROUTER_MODEL_EXPLICIT="$OPENROUTER_MODEL_EXPLICIT" \
+python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+path = Path(os.environ["ROUTER_CONFIG_PATH"])
+defaults_path = Path(os.environ["ROUTER_DEFAULT_CONFIG_PATH"])
+try:
+    config = json.loads(path.read_text())
+except Exception:
+    config = {}
+defaults = json.loads(defaults_path.read_text())
+install_root = os.environ["ROUTER_INSTALL_ROOT"]
+provider = os.environ["ROUTER_PROVIDER"]
+if os.environ["ROUTER_PROVIDER_EXPLICIT"] != "1" and config.get("provider") in {"codex", "openrouter"}:
+    provider = config["provider"]
+providers = list(dict.fromkeys(os.environ["ROUTER_PROVIDERS"].split(",")))
+if os.environ["ROUTER_PROVIDERS_EXPLICIT"] != "1":
+    existing = config.get("providers")
+    if isinstance(existing, list) and existing and all(item in {"codex", "openrouter"} for item in existing):
+        providers = list(dict.fromkeys(existing))
+if provider not in providers:
+    providers.insert(0, provider)
+codex_model = os.environ["ROUTER_CODEX_MODEL"]
+if os.environ["ROUTER_CODEX_MODEL_EXPLICIT"] != "1" and isinstance(config.get("codexModel"), str):
+    codex_model = config["codexModel"]
+openrouter_model = os.environ["ROUTER_OPENROUTER_MODEL"]
+if os.environ["ROUTER_OPENROUTER_MODEL_EXPLICIT"] != "1" and isinstance(config.get("openRouterModel"), str):
+    openrouter_model = config["openRouterModel"]
+config.update({
+    "enabled": True,
+    "autoRepair": True,
+    "provider": provider,
+    "providers": providers,
+    "codexModel": codex_model,
+    "openRouterModel": openrouter_model,
+    "codexModels": defaults.get("codexModels", []),
+    "openRouterModels": defaults.get("openRouterModels", []),
+    "runnerPath": f"{install_root}/run-provider.mjs",
+    "nodePath": "/usr/bin/node",
+    "statePath": f"{install_root}/conversation-states.json",
+    "auditPath": f"{install_root}/audit.jsonl",
+})
+path.write_text(json.dumps(config, indent=2) + "\n")
+path.chmod(0o600)
+PY
+
+DEFAULT_PROVIDER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["provider"])' "$STAGE_ROOT/provider.json")"
+ENABLED_PROVIDERS="$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["providers"]))' "$STAGE_ROOT/provider.json")"
+CODEX_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codexModel"])' "$STAGE_ROOT/provider.json")"
+OPENROUTER_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["openRouterModel"])' "$STAGE_ROOT/provider.json")"
+
+printf '[3/6] Installing pinned Codex SDK dependencies\n'
+(cd "$STAGE_ROOT" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
+
+printf '[4/6] Activating runtime atomically\n'
+if [[ -e "$INSTALL_ROOT" ]]; then
+  PREVIOUS_ROOT="${INSTALL_ROOT}.previous.$(date +%s)"
+  mv "$INSTALL_ROOT" "$PREVIOUS_ROOT"
+fi
+mv "$STAGE_ROOT" "$INSTALL_ROOT"
+STAGE_ROOT=""
+
+rollback_runtime() {
+  if [[ -d "$INSTALL_ROOT" ]]; then
+    rm -rf "$INSTALL_ROOT"
+  fi
+  if [[ -n "$PREVIOUS_ROOT" && -d "$PREVIOUS_ROOT" ]]; then
+    mv "$PREVIOUS_ROOT" "$INSTALL_ROOT"
+  fi
+}
+
+printf '[5/6] Applying version-gated host adapter\n'
+PATCH_HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
+PATCH_BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
+PATCH_MANIFEST="${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
+PATCH_ARGS=(
+  --host "$PATCH_HOST"
+  --backup "$PATCH_BACKUP"
+  --manifest "$PATCH_MANIFEST"
+  --json
+)
+if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
+  PATCH_ARGS+=(--allow-unknown-host)
+fi
+if ! python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"; then
+  rollback_runtime
+  printf 'ERROR: host adapter failed; the previous runtime was restored\n' >&2
+  exit 1
+fi
+
+ROUTER_BIN_DIR="${ROUTER_BIN_DIR:-/home/box/.local/bin}"
+mkdir -p "$ROUTER_BIN_DIR"
+ln -sfn "$INSTALL_ROOT/bin/grokbot-router" "$ROUTER_BIN_DIR/grokbot-router"
+if [[ "$ROUTER_BIN_DIR" == "/home/box/.local/bin" ]]; then
+  if [[ -w "/usr/local/bin" ]]; then
+    ln -sfn "$INSTALL_ROOT/bin/grokbot-router" "/usr/local/bin/grokbot-router"
+  elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+    sudo -n ln -sfn "$INSTALL_ROOT/bin/grokbot-router" "/usr/local/bin/grokbot-router"
+  else
+    printf 'WARNING: use /home/box/.local/bin/grokbot-router because /usr/local/bin is not writable\n' >&2
+  fi
+fi
+
+printf '[6/6] Final verification\n'
+node --check "$INSTALL_ROOT/run-provider.mjs"
+python3 "$INSTALL_ROOT/patch/router_patch.py" --doctor "${PATCH_ARGS[@]}"
+
+# Grok can replace the live host when it provisions a different Bot computer.
+# Keep the exact-hash/anchor gates authoritative and repair only a known stock
+# host. The watchdog also installs an XDG autostart entry so it returns when the
+# persisted Bot desktop is recreated.
+if [[ "$START_WATCHDOG" == "1" ]]; then
+  WATCHDOG_PID_FILE="$INSTALL_PARENT/grokbot-router-watchdog.pid"
+  if [[ -f "$WATCHDOG_PID_FILE" ]]; then
+    OLD_WATCHDOG_PID="$(cat "$WATCHDOG_PID_FILE" 2>/dev/null || true)"
+    if [[ "$OLD_WATCHDOG_PID" =~ ^[0-9]+$ ]]; then
+      kill "$OLD_WATCHDOG_PID" >/dev/null 2>&1 || true
+    fi
+  fi
+  mkdir -p /home/box/.config/autostart
+  cat > /home/box/.config/autostart/grokbot-router-watchdog.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Name=GrokRouter Watchdog
+Exec=$INSTALL_ROOT/bin/grokbot-router-watchdog
+X-GNOME-Autostart-enabled=true
+NoDisplay=true
+EOF
+  nohup "$INSTALL_ROOT/bin/grokbot-router-watchdog" \
+    >"$INSTALL_PARENT/grokbot-router-watchdog.log" 2>&1 &
+  printf '%s\n' "$!" > "$WATCHDOG_PID_FILE"
+fi
+
+ROUTER_INSTALL_ROOT="$INSTALL_ROOT" python3 - <<'PY'
+import os
+import shutil
+from pathlib import Path
+
+install_root = Path(os.environ["ROUTER_INSTALL_ROOT"])
+backups = sorted(
+    install_root.parent.glob(f"{install_root.name}.previous.*"),
+    key=lambda candidate: candidate.stat().st_mtime_ns,
+    reverse=True,
+)
+for stale in backups[2:]:
+    if stale.is_dir():
+        shutil.rmtree(stale)
+PY
+
+printf '\nGROKBOT_ROUTER_INSTALL_OK\n'
+printf 'Version: %s\n' "$ROUTER_VERSION"
+printf 'Default provider: %s\n' "$DEFAULT_PROVIDER"
+printf 'Enabled providers: %s\n' "$ENABLED_PROVIDERS"
+if [[ "$ENABLED_PROVIDERS" == *codex* ]]; then
+  printf 'Next: run grokbot-router auth codex, then complete the device sign-in.\n'
+fi
+if [[ "$ENABLED_PROVIDERS" == *openrouter* ]]; then
+  printf 'OpenRouter uses the OPENROUTER_API_KEY saved through Grok Bot Secrets.\n'
+fi
+printf 'In Grok Bot chat, send /router doctor after the host reconnects.\n'
+
+# Let the terminal display the real completion marker before the host restart
+# tears down the current noVNC target. This prevents a successful install from
+# looking like a transport failure to the Mac installer.
+if [[ "$RESTART_HOST" == "1" ]]; then
+  nohup sh -c "sleep 3; pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true" \
+    >/dev/null 2>&1 &
+fi
