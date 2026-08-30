@@ -5,7 +5,7 @@
 <h1 align="center">GrokRouter</h1>
 
 <p align="center">
-  <strong>Bring your own brain to Grok Bot.</strong><br>
+  <strong>Bring your own model to Grok Bot.</strong><br>
   Route the official Grok Bot desktop app through the Codex SDK or OpenRouter<br>
   without giving up its chat, Bots, files, computer, or tool boundary.
 </p>

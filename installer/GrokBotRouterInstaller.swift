@@ -199,7 +199,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let eyebrow = NSTextField(labelWithString: "PRIVATE BETA  •  GROK BOT 0.30.0")
         eyebrow.font = .monospacedSystemFont(ofSize: 11, weight: .semibold)
         eyebrow.textColor = NSColor(calibratedRed: 1.0, green: 0.48, blue: 0.12, alpha: 1)
-        let title = NSTextField(labelWithString: "Bring your own brain.")
+        let title = NSTextField(labelWithString: "Bring your own model.")
         title.font = .systemFont(ofSize: 30, weight: .bold)
         title.textColor = .labelColor
         let subtitle = NSTextField(wrappingLabelWithString: "Keep Grok Bot’s interface, computer, files and tools. Route each Bot through Codex or OpenRouter, then switch models from the normal chat composer.")
