@@ -11,74 +11,18 @@
 </p>
 
 <p align="center">
-  <img alt="Beta 0.1.0-beta.40" src="https://img.shields.io/badge/beta-0.1.0--beta.40-ff6b2c?style=flat-square">
+  <img alt="Experimental project" src="https://img.shields.io/badge/status-experimental-ff6b2c?style=flat-square">
   <img alt="Grok Bot 0.30.0 only" src="https://img.shields.io/badge/Grok_Bot-0.30.0_only-171717?style=flat-square">
   <img alt="macOS Apple silicon" src="https://img.shields.io/badge/macOS-Apple_silicon-111111?style=flat-square&logo=apple">
   <img alt="Windows x64 and Arm64 source preview" src="https://img.shields.io/badge/Windows-x64_%7C_Arm64_preview-0078d4?style=flat-square&logo=windows11">
 </p>
 
 > [!IMPORTANT]
-> GrokRouter is an unofficial, reversible beta pinned to **Grok Bot 0.30.0**. It patches an implementation detail and is not affiliated with xAI, X, Anysphere, OpenAI, Anthropic, or OpenRouter. Unknown Grok Bot builds are rejected instead of guessed at.
+> GrokRouter is an experimental, unofficial, reversible project for **Grok Bot 0.30.0 only**. If GrokRouter reports an unsupported or changed version, stop. Never force it past that check.
 
-## Install on Mac
+## What does it do?
 
-macOS on Apple silicon is the currently live-verified platform. The simplest install builds the small native app locally from this public repository, then puts it in your personal Applications folder. A Windows x64/Arm64 source preview is also included below, but it is not a public Windows compatibility claim until its native acceptance cycle passes.
-
-### 1. Install Grok Bot first
-
-Install the official **Grok Bot 0.30.0** app and make sure it is in `/Applications`. Open it once and confirm that you can select a Bot and open its Computer.
-
-### 2. Download and run the installer
-
-Click **Code → Download ZIP** on this repository, unzip it, and double-click **Install GrokRouter.command**.
-
-The installer builds GrokRouter from this downloaded source, verifies the local app signature, installs it to `~/Applications/GrokRouter.app`, and opens it. It does not need Git, `sudo`, an installer package, or an Apple signing certificate.
-
-If Apple Command Line Tools are missing, macOS will offer to install them. Finish that Apple installation, then double-click **Install GrokRouter.command** again.
-
-The complete installer source is [here](scripts/install-macos.sh) for inspection.
-
-### 3. Click Install Router
-
-Keep Grok Bot visible, choose Codex SDK, OpenRouter, or both in GrokRouter, then click **Install Router**. If it asks for a Bot computer, return to Grok Bot, select any Bot, and click **Open computer**.
-
-### 4. Check a new Bot
-
-Create a brand-new Bot after installation. In its normal chat box, send `/router doctor`, then `/provider`. If both status messages look healthy, chat normally.
-
-> [!NOTE]
-> This source-build route is intentionally transparent: your Mac compiles the app from the exact code you can inspect here. GrokRouter never asks you to disable Gatekeeper or install an unknown downloaded binary.
-
-## Install and use it in plain English
-
-For the supported Grok Bot 0.30.0 build, the normal setup is: open Grok Bot, open GrokRouter, choose your model, and click **Install Router**. There are only a few details to know.
-
-### Before you start
-
-- Install the official **Grok Bot 0.30.0** desktop app.
-- Have a Codex account, an OpenRouter API key, or both.
-- Make sure you can open the Computer for at least one Bot in Grok Bot.
-- Install GrokRouter from this repository using the command above.
-
-### Step by step
-
-1. **Open Grok Bot** and leave it visible.
-2. **Open GrokRouter.** Find it in your personal Applications folder.
-3. **Choose what you want to use.** Turn Codex SDK and OpenRouter on or off, choose the default provider, and choose the default models.
-4. **Add your OpenRouter key** if you enabled OpenRouter. The installer sends it directly to Grok Bot's protected Secrets store and clears the field.
-5. **Click Install Router.** GrokRouter checks the exact app version before changing anything and saves a verified stock backup first.
-6. **If GrokRouter asks for a Bot computer,** return to Grok Bot, select any Bot, and click **Open computer**. Keep Grok Bot and GrokRouter open while the installer finishes. You do not need to type terminal commands yourself.
-7. **If you enabled Codex, click Codex sign-in** in GrokRouter and complete the sign-in instructions shown in the Bot terminal.
-8. **Create a brand-new Bot** after installation. In its normal chat box, send `/router doctor`, then `/provider`. If both status messages look healthy, chat normally.
-
-From then on, stay inside Grok Bot. Send `/models` to see the available models, paste one listed model ID by itself to switch that Bot, and send `/provider` whenever you want to confirm its current choice. The installer also publishes those command families through Grok Bot's native `/` discovery menu.
-
-> [!CAUTION]
-> If GrokRouter says your copy of Grok Bot is unsupported or has changed, stop there. That refusal protects the stock app. Do not force the installation.
-
-## The short version
-
-GrokRouter keeps Grok Bot as the product you touch and changes the model runtime behind a Bot.
+You keep using the normal Grok Bot app. GrokRouter lets an individual Bot use the Codex SDK or a model from OpenRouter as its AI brain.
 
 | You keep | You choose |
 | --- | --- |
@@ -87,7 +31,137 @@ GrokRouter keeps Grok Bot as the product you touch and changes the model runtime
 | Cloud computer, files, browser, and permissions | A different model and reasoning level per Bot |
 | Grok's outer tool-execution boundary | Stock Grok again at any time |
 
-Install it once, create a Bot, and type `/provider`. That Bot can use Codex while another uses Claude, Luna, or another configured OpenRouter model. Provider state is isolated per Bot and written atomically.
+It is reversible: **Restore Stock Grok Bot** puts the verified original inference path back.
+
+## Start here: get it working on a Mac
+
+> [!TIP]
+> **Just want it working? Follow the four numbered steps below and stop. Everything after “Give this repository to your AI assistant” is optional technical detail.**
+
+```mermaid
+flowchart LR
+    A[1. Open Grok Bot] --> B[2. Download and open GrokRouter]
+    B --> C[3. Choose a provider and install]
+    C --> D[4. Create a new Bot and run Doctor]
+```
+
+### Before you start: four yes-or-no checks
+
+Continue only if every answer is **yes**:
+
+- **Mac:** You have an Apple-silicon Mac—M1, M2, M3, M4, or newer—running macOS 12 or later.
+- **Grok Bot:** The official **Grok Bot 0.30.0** app is inside your Mac's main `Applications` folder.
+- **Bot computer:** You can select a Bot in Grok Bot and click **Open computer**.
+- **Model access:** You have a Codex account, an OpenRouter API key beginning with `sk-or-v1-`, or both.
+
+Windows builds exist for developers to inspect, but Windows is not yet the beginner installation path.
+
+### 1. Open Grok Bot
+
+Open the official Grok Bot app. Select any Bot, click **Open computer**, and leave Grok Bot open.
+
+### 2. Download and open GrokRouter
+
+1. Click the green **Code** button near the top of this GitHub page.
+2. Click **Download ZIP**.
+3. Open your Mac's **Downloads** folder and double-click the downloaded ZIP.
+4. Open the new folder whose name starts with `grokrouter` (usually `grokrouter-main`).
+5. Double-click **Install GrokRouter.command**. Keep the Terminal window open while it builds.
+
+The process is finished when Terminal says:
+
+```text
+GrokRouter is installed in your Applications folder. Opening it now...
+```
+
+If macOS installs Apple Command Line Tools first, let that finish and then double-click **Install GrokRouter.command** again. If macOS asks whether to open the downloaded command, Control-click it, choose **Open**, and confirm **Open**. You never need to disable Gatekeeper or use `sudo`.
+
+### 3. Choose your model and click Install Router
+
+Pick the row that matches what you have:
+
+| What you have | What to select |
+| --- | --- |
+| A Codex account | Keep **Codex SDK** checked. You can uncheck OpenRouter. Select **Codex SDK** as the default. |
+| An OpenRouter key | Keep **OpenRouter** checked, paste the complete `sk-or-v1-...` key, and select **OpenRouter** as the default. |
+| Both | Keep both checked, paste your OpenRouter key, and choose whichever provider you want new Bots to use first. |
+
+Click **Install Router** and wait. Do not close Grok Bot or GrokRouter.
+
+- If GrokRouter asks for a Bot computer, return to Grok Bot, select any Bot, and click **Open computer**.
+- If you selected Codex, click **Start Codex Sign-in** after installation and complete the sign-in shown in the Bot terminal.
+- Your OpenRouter key is sent directly to Grok Bot's protected Secrets store and cleared from the installer field.
+
+The installer has finished when its log shows a line beginning with `✓ Installed`.
+
+### 4. Prove it works in a brand-new Bot
+
+Create a **new Bot after installation**. In that Bot's normal chat box, send these one at a time:
+
+```text
+/router doctor
+/provider
+```
+
+You are done when:
+
+- Doctor starts with `Router ...: OK`.
+- `/provider` names the provider and model you selected.
+- A normal message in that same Bot receives a normal answer.
+
+From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
+
+## If something goes wrong
+
+| What you see | What to do |
+| --- | --- |
+| Apple Command Line Tools are required | Finish Apple's installation, then double-click **Install GrokRouter.command** again. |
+| macOS will not open the command | Control-click **Install GrokRouter.command**, choose **Open**, then confirm **Open**. Do not disable Gatekeeper. |
+| `install Grok Bot 0.30.0 in Applications first` | Put the official app at `/Applications/Grok Bot.app`, open it once, then retry. |
+| Unsupported or changed Grok Bot version | Stop. Do not force the installation or change the version/hash checks. |
+| GrokRouter asks for a Bot computer | In Grok Bot, select any Bot and click **Open computer**. Leave it open while the installer continues. |
+| Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
+| OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
+| GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
+
+If Doctor still reports a failure, copy its complete non-secret output into a GitHub issue or give it to your AI assistant. Never post an API key.
+
+## Everyday commands
+
+Type these into a Bot's normal Grok chat box:
+
+| Command | Plain-English meaning |
+| --- | --- |
+| `/models` | Show the models you can use. |
+| Paste a listed `vendor/model` ID | Switch this Bot to that model. |
+| `/provider` | Show which provider and model this Bot is using. |
+| `/reasoning low\|medium\|high\|xhigh` | Change Codex thinking effort. |
+| `/router reset` | Start a fresh provider thread without deleting the Grok conversation. |
+| `/router doctor` | Check whether the installation, provider, and credentials are healthy. |
+
+Each Bot keeps its own provider and model choice.
+
+## Give this repository to your AI assistant
+
+Paste this prompt into Codex, Claude Code, or another coding assistant that can read the repository:
+
+```text
+Help me install and verify GrokRouter from this repository. Read README.md and
+AGENTS.md first. Walk me through one step at a time in plain English. Before
+changing anything, confirm that this is an Apple-silicon Mac on macOS 12 or
+later and that /Applications/Grok Bot.app is exactly version 0.30.0. Never
+bypass an unsupported-version, hash, signature, or source-anchor check. Use the
+documented installer and recovery paths only. After installation, help me create
+a brand-new Bot and verify /router doctor and /provider. If anything fails,
+explain the exact failure without exposing API keys or other secrets.
+```
+
+---
+
+<details>
+<summary><strong>Optional: technical architecture, builds, complete commands, safety, and release evidence</strong></summary>
+
+Everything below is for developers, auditors, and AI assistants. A normal user does not need it to install or use GrokRouter.
 
 ## How it works
 
@@ -321,6 +395,8 @@ See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and t
 GrokRouter is deliberately narrow. Adding another Grok Bot version requires inspecting the untouched stock host, recording its exact hash and size, confirming every patch anchor exactly once, running the complete automated suite, and completing the live install → restore → reinstall → fresh-Bot gate on each claimed platform.
 
 Never add a wildcard hash. Never ship a development override. Never call a preview verified.
+
+</details>
 
 ---
 
