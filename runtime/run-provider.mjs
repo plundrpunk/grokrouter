@@ -9,7 +9,7 @@ const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
-const ROUTER_VERSION = "0.1.0-beta.41";
+const ROUTER_VERSION = "0.1.0-beta.42";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
   "sendtouser",
