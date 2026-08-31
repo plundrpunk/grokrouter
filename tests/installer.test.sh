@@ -107,12 +107,18 @@ tar -xzf "$ARCHIVE" -C "$TEMPORARY"
 PAYLOAD="$TEMPORARY/grokbot-router-payload"
 (cd "$PAYLOAD" && shasum -a 256 -c SHA256SUMS >/dev/null)
 [[ "$(cat "$PAYLOAD/VERSION")" == "$(node -p "require('$PROJECT_ROOT/package.json').version")" ]]
+for skill_name in provider models model reasoning router; do
+  [[ -f "$PAYLOAD/skills/$skill_name/SKILL.md" ]]
+  grep -q '^user-invocable: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
+  grep -q '^disable-model-invocation: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
+done
 
 HOST_FIXTURE="$PROJECT_ROOT/tests/fixtures/host-main.cjs"
 TEST_HOST="$TEMPORARY/host-main.cjs"
 TEST_BACKUP="$TEMPORARY/host-main.cjs.stock"
 TEST_RUNTIME="$TEMPORARY/runtime"
 TEST_BIN="$TEMPORARY/bin"
+TEST_GROK_SKILLS="$TEMPORARY/grok-skills"
 cp "$HOST_FIXTURE" "$TEST_HOST"
 mkdir -p "$TEST_RUNTIME"
 printf '%s\n' '{"provider":"openrouter","openRouterModels":["openai/gpt-5.2","legacy/removed-model"]}' > "$TEST_RUNTIME/provider.json"
@@ -120,6 +126,7 @@ ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_BIN_DIR="$TEST_BIN" \
+ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$TEST_RUNTIME" \
   --provider codex \
@@ -133,6 +140,13 @@ grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
 [[ -L "$TEST_BIN/grokbot-router" ]]
 [[ -x "$TEST_RUNTIME/bin/grokbot-router-watchdog" ]]
+for skill_name in provider models model reasoning router; do
+  [[ -L "$TEST_GROK_SKILLS/$skill_name" ]]
+  [[ "$(readlink "$TEST_GROK_SKILLS/$skill_name")" == "$TEST_RUNTIME/skills/$skill_name" ]]
+done
+rm "$TEST_GROK_SKILLS/reasoning"
+mkdir "$TEST_GROK_SKILLS/reasoning"
+printf 'user-owned\n' > "$TEST_GROK_SKILLS/reasoning/KEEP"
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: codex'
 python3 - "$TEST_RUNTIME/provider.json" <<'PY'
 import json
@@ -168,12 +182,14 @@ ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_BIN_DIR="$TEST_BIN" \
+ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$TEST_RUNTIME" \
   --no-restart \
   >/dev/null
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
+grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
   --allow-unknown-host \
@@ -190,5 +206,17 @@ ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
 grep -q 'GROKBOT_MODEL_ROUTER_V37' "$TEST_HOST"
+
+ROUTER_PATCH_HOST="$TEST_HOST" \
+ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_WATCHDOG_ENABLED=0 \
+ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
+"$TEST_BIN/grokbot-router" uninstall >/dev/null
+cmp "$HOST_FIXTURE" "$TEST_HOST"
+for skill_name in provider models model router; do
+  [[ ! -e "$TEST_GROK_SKILLS/$skill_name" && ! -L "$TEST_GROK_SKILLS/$skill_name" ]]
+done
+grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 
 printf 'Installer and payload checks passed.\n'

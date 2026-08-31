@@ -14,6 +14,7 @@ PROVIDERS_EXPLICIT=0
 CODEX_MODEL_EXPLICIT=0
 OPENROUTER_MODEL_EXPLICIT=0
 START_WATCHDOG=1
+GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 
 usage() {
   printf '%s\n' \
@@ -129,17 +130,24 @@ for required in \
     exit 1
   fi
 done
+for skill_name in provider models model reasoning router; do
+  if [[ ! -f "$PAYLOAD_ROOT/skills/$skill_name/SKILL.md" ]]; then
+    printf 'ERROR: payload is missing the /%s discovery skill\n' "$skill_name" >&2
+    exit 1
+  fi
+done
 
 printf '[2/6] Preparing isolated runtime\n'
 cp "$PAYLOAD_ROOT/runtime/run-provider.mjs" "$STAGE_ROOT/run-provider.mjs"
 cp "$PAYLOAD_ROOT/runtime/package.json" "$STAGE_ROOT/package.json"
 cp "$PAYLOAD_ROOT/runtime/package-lock.json" "$STAGE_ROOT/package-lock.json"
 cp "$PAYLOAD_ROOT/runtime/provider.default.json" "$STAGE_ROOT/provider.json"
-mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin"
+mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin" "$STAGE_ROOT/skills"
 cp "$PAYLOAD_ROOT/patch/router_patch.py" "$STAGE_ROOT/patch/router_patch.py"
 cp "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" "$STAGE_ROOT/patch/manifests/0.30.0.json"
 cp "$PAYLOAD_ROOT/remote/grokbot-router" "$STAGE_ROOT/bin/grokbot-router"
 cp "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" "$STAGE_ROOT/bin/grokbot-router-watchdog"
+cp -R "$PAYLOAD_ROOT/skills/." "$STAGE_ROOT/skills/"
 chmod 700 "$STAGE_ROOT/bin/grokbot-router" "$STAGE_ROOT/bin/grokbot-router-watchdog" "$STAGE_ROOT/patch/router_patch.py"
 
 if [[ -f "$INSTALL_ROOT/provider.json" ]]; then
@@ -249,6 +257,22 @@ if ! python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"; then
   printf 'ERROR: host adapter failed; the previous runtime was restored\n' >&2
   exit 1
 fi
+
+# Grok discovers user-invocable skills from ~/.grok/skills and renders them in
+# its native slash menu. Link only empty names or links already owned by this
+# installation; never overwrite a user's existing skill with a generic name.
+mkdir -p "$GROK_SKILLS_ROOT"
+for skill_name in provider models model reasoning router; do
+  skill_source="$INSTALL_ROOT/skills/$skill_name"
+  skill_link="$GROK_SKILLS_ROOT/$skill_name"
+  if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
+    ln -sfn "$skill_source" "$skill_link"
+  elif [[ ! -e "$skill_link" && ! -L "$skill_link" ]]; then
+    ln -s "$skill_source" "$skill_link"
+  else
+    printf 'WARNING: /%s discovery was skipped because %s already exists\n' "$skill_name" "$skill_link" >&2
+  fi
+done
 
 ROUTER_BIN_DIR="${ROUTER_BIN_DIR:-/home/box/.local/bin}"
 mkdir -p "$ROUTER_BIN_DIR"

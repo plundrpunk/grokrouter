@@ -30,9 +30,9 @@ An update follows the same path. Provider/model selections are preserved unless 
 
 ## Control turn
 
-The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
+The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. The payload also installs user-invocable skill descriptors under Grok's documented user skill root, which makes the five command families eligible for its native `/` suggestion menu. Those descriptors do not implement or authorize a control; the runtime remains the only command authority. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
 
-Controls are not native Grok slash-menu entries. Their determinism comes from interception before inference, not from autocomplete registration. Invalid near-misses and unlisted bare model IDs also stop at the control plane instead of inviting a model to invent an answer.
+The installer links only missing skill names or links already owned by the current GrokRouter installation. A pre-existing user skill wins, is never replaced, and is reported as a discovery conflict by Doctor. Removing GrokRouter removes only its own links. Command determinism comes from interception before inference, not from autocomplete registration. Invalid near-misses and unlisted bare model IDs also stop at the control plane instead of inviting a model to invent an answer.
 
 ## Turn flow
 

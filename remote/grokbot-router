@@ -13,6 +13,7 @@ INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
 CODEX_CLI="$INSTALL_ROOT/node_modules/.bin/codex"
+GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 PATCH_ARGS=(
   --host "${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
   --backup "${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
@@ -180,6 +181,18 @@ elif value:
 else:
     print("  Credential: not configured")
 PY
+    printf 'Slash discovery\n'
+    for skill_name in provider models model reasoning router; do
+      skill_source="$INSTALL_ROOT/skills/$skill_name"
+      skill_link="$GROK_SKILLS_ROOT/$skill_name"
+      if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
+        printf '  /%s: installed\n' "$skill_name"
+      elif [[ -e "$skill_link" || -L "$skill_link" ]]; then
+        printf '  /%s: name conflict at %s\n' "$skill_name" "$skill_link"
+      else
+        printf '  /%s: missing\n' "$skill_name"
+      fi
+    done
     printf 'GROKBOT_ROUTER_DOCTOR_DONE\n'
     exit "$doctor_ok"
     ;;
@@ -249,6 +262,13 @@ PY
     stop_watchdog
     python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --json
     update_config enabled false
+    for skill_name in provider models model reasoning router; do
+      skill_source="$INSTALL_ROOT/skills/$skill_name"
+      skill_link="$GROK_SKILLS_ROOT/$skill_name"
+      if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
+        rm "$skill_link"
+      fi
+    done
     # Emit the restore sentinel before the delayed host restart. Killing the
     # host first can replace the VNC target before the installer sees success.
     printf 'GROKBOT_ROUTER_UNINSTALL_OK\n'

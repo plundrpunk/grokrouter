@@ -23,7 +23,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$BUILD_ROOT" "$PAYLOAD_ROOT/runtime" "$PAYLOAD_ROOT/patch/manifests" "$PAYLOAD_ROOT/remote"
+mkdir -p "$BUILD_ROOT" "$PAYLOAD_ROOT/runtime" "$PAYLOAD_ROOT/patch/manifests" "$PAYLOAD_ROOT/remote" "$PAYLOAD_ROOT/skills"
 cp "$PROJECT_ROOT/runtime/run-provider.mjs" "$PAYLOAD_ROOT/runtime/run-provider.mjs"
 cp "$PROJECT_ROOT/runtime/package.json" "$PAYLOAD_ROOT/runtime/package.json"
 cp "$PROJECT_ROOT/runtime/package-lock.json" "$PAYLOAD_ROOT/runtime/package-lock.json"
@@ -33,6 +33,7 @@ cp "$PROJECT_ROOT/patch/manifests/0.30.0.json" "$PAYLOAD_ROOT/patch/manifests/0.
 cp "$PROJECT_ROOT/remote/install.sh" "$PAYLOAD_ROOT/remote/install.sh"
 cp "$PROJECT_ROOT/remote/grokbot-router" "$PAYLOAD_ROOT/remote/grokbot-router"
 cp "$PROJECT_ROOT/remote/grokbot-router-watchdog" "$PAYLOAD_ROOT/remote/grokbot-router-watchdog"
+cp -R "$PROJECT_ROOT/skills/." "$PAYLOAD_ROOT/skills/"
 chmod 700 "$PAYLOAD_ROOT/remote/install.sh" "$PAYLOAD_ROOT/remote/grokbot-router" "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" "$PAYLOAD_ROOT/patch/router_patch.py"
 printf '%s\n' "$VERSION" > "$PAYLOAD_ROOT/VERSION"
 
