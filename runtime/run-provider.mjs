@@ -241,11 +241,9 @@ const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_(?:COMMAND:\s*\/|CONTR
 export function nativeWorkflowControlText(messages) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    const role = messageRole(message);
-    if (role !== "user" && role !== "human") continue;
     const raw = collectText(message?.content ?? message);
     const markers = [...raw.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
-    if (markers.length === 0) return "";
+    if (markers.length === 0) continue;
     const base = `/${markers[markers.length - 1][1].toLowerCase()}`;
     const commandName = base.slice(1);
     const visible = extractUserQuery(raw).trim();

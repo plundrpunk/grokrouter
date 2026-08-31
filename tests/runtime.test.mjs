@@ -87,6 +87,13 @@ test("extracts deterministic controls from Grok's registered workflow envelope o
     nativeWorkflowControlText([user("# GrokRouter provider\n\nGROKROUTER_NATIVE_CONTROL: PROVIDER")]),
     "/provider",
   );
+  assert.equal(
+    nativeWorkflowControlText([user("sanitized channel request"), {
+      role: "system",
+      content: "# GrokRouter provider\n\nGROKROUTER_NATIVE_CONTROL: PROVIDER",
+    }]),
+    "/provider",
+  );
   assert.equal(nativeWorkflowControlText([user("doctor")]), "");
 });
 
