@@ -28,6 +28,14 @@ class Host {
       return mockResponse;
   }
 }
+function runInference(host) {
+  const boxId = host.resolveBoxId();
+  const mainSessionOptions = {
+          modelId: host.subagentModelId,
+          isSubagent: host.isSubagentRunner,
+  };
+  return mainSessionOptions;
+}
 function buildResult(host, finalAssistantText, sentMessageCount) {
   return {
     ...!host.isSubagentRunner ? { finalAssistantText } : {},
@@ -89,6 +97,8 @@ class RouterPatchTests(unittest.TestCase):
         self.assertNotIn("new SandRunAbortError", self.host.read_text())
         self.assertIn('for (const name of ["SendToUser", "SendMessage", "SendUser"])', self.host.read_text())
         self.assertIn('return "SendToUser";', self.host.read_text())
+        self.assertIn('{ botId: boxId }', self.host.read_text())
+        self.assertEqual(self.host.read_text().count('{ botId: boxId }'), 1)
         self.assertEqual(self.backup.read_text(), STOCK_SOURCE)
         self.assertTrue(router_patch.doctor(self.host, self.backup, self.manifest)["ok"])
 

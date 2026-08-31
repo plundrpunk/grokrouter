@@ -10,6 +10,14 @@ class Host {
       return mockResponse;
   }
 }
+function runInference(host) {
+  const boxId = host.resolveBoxId();
+  const mainSessionOptions = {
+          modelId: host.subagentModelId,
+          isSubagent: host.isSubagentRunner,
+  };
+  return mainSessionOptions;
+}
 function buildResult(host, finalAssistantText, sentMessageCount) {
   return {
     ...!host.isSubagentRunner ? { finalAssistantText } : {},

@@ -667,11 +667,22 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     }
 
     private func evaluate(_ client: CDPClient, sessionID: String, expression: String) async throws -> [String: Any] {
-        try await client.call("Runtime.evaluate", params: [
+        let response = try await client.call("Runtime.evaluate", params: [
             "expression": expression,
             "awaitPromise": true,
             "returnByValue": true
         ], sessionID: sessionID)
+        if let details = response["exceptionDetails"] as? [String: Any] {
+            let exception = details["exception"] as? [String: Any]
+            let description = (exception?["description"] as? String)?
+                .split(separator: "\n", maxSplits: 1)
+                .first
+                .map(String.init)
+                ?? (details["text"] as? String)
+                ?? "Grok Bot rejected a local installer command."
+            throw InstallerError.message(description)
+        }
+        return response
     }
 
     private func saveOpenRouterKey(_ key: String, client: CDPClient, pageSession: String) async throws {
@@ -1106,6 +1117,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let bots = (stats["bots"] as? NSNumber)?.intValue ?? 0
         let installed = (stats["installed"] as? NSNumber)?.intValue ?? 0
         let updated = (stats["updated"] as? NSNumber)?.intValue ?? 0
+        let unchanged = (stats["unchanged"] as? NSNumber)?.intValue ?? 0
         let removed = (stats["removed"] as? NSNumber)?.intValue ?? 0
         let conflicts = (stats["conflicts"] as? NSNumber)?.intValue ?? 0
         let unavailable = (stats["unavailable"] as? NSNumber)?.intValue ?? 0
@@ -1116,9 +1128,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             appendLog("\(conflicts) user-owned slash commands were preserved because their names conflict.")
         }
         if operation == "remove" {
-            appendLog("Removed \(removed) GrokRouter command entries from \(bots) Bots and channels.")
+            appendLog("Removed \(removed) GrokRouter command entries from Grok Bot's shared workflow library.")
         } else {
-            appendLog("Registered \(installed + updated) GrokRouter command entries across \(bots) Bots and channels.")
+            appendLog("Verified \(installed + updated + unchanged) unique GrokRouter commands for \(bots) Bots and channels.")
+            if removed > 0 {
+                appendLog("Removed \(removed) duplicate command entries left by an earlier beta.")
+            }
         }
         return stats
     }

@@ -13,6 +13,7 @@ import {
   automationContinuationSignature,
   codexTranscriptMessages,
   conversationIdentity,
+  structuredRouterControlText,
   extractUserQuery,
   hasDeliveryAfterLatestQuery,
   latestUserText,
@@ -53,6 +54,22 @@ test("extracts router controls only from exact or pure group-addressed input", (
     addressedRouterControlText("Please <mention>@Research Bot</mention> /provider"),
     "Please <mention>@Research Bot</mention> /provider",
   );
+});
+
+test("extracts a group control stored in a structured command leaf", () => {
+  const structured = [{
+    role: "user",
+    content: {
+      text: "@Social Guru",
+      mention: { label: "Social Guru" },
+      command: { text: "/provider" },
+    },
+  }];
+  assert.equal(structuredRouterControlText(structured), "/provider");
+  assert.equal(structuredRouterControlText([{
+    role: "user",
+    content: { text: "Please tell Social Guru to run /provider" },
+  }]), "");
 });
 
 test("extracts deterministic controls from Grok's registered workflow envelope only", () => {

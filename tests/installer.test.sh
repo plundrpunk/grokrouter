@@ -62,6 +62,16 @@ grep -q 'GROKROUTER_NATIVE_COMMAND' "$PROJECT_ROOT/installer/native-workflow-reg
 grep -q 'app.workflows.install' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'app.workflows.update' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'app.workflows.remove' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'agent.id === selectedAgentId' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'waitForSelectedAgentId' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'selection can be superseded' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'remove duplicate' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'withRetries' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'stats.unchanged' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+if grep -q 'Promise.all(agents' "$PROJECT_ROOT/installer/native-workflow-registration.js"; then
+  echo "Native workflows must be reconciled once through Grok Bot's global library" >&2
+  exit 1
+fi
 grep -q 'private let repairButton' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -146,7 +156,7 @@ bash "$PAYLOAD/remote/install.sh" \
   --no-restart \
   >/dev/null
 
-grep -q 'GROKBOT_MODEL_ROUTER_V37' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V38' "$TEST_HOST"
 grep -q 'appendGrokBotRouterHostError' "$TEST_HOST"
 grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
@@ -217,7 +227,7 @@ ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
-grep -q 'GROKBOT_MODEL_ROUTER_V37' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V38' "$TEST_HOST"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \

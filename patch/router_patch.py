@@ -20,8 +20,8 @@ import time
 from typing import Any
 
 
-MARKER = "GROKBOT_MODEL_ROUTER_V37"
-LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31))")
+MARKER = "GROKBOT_MODEL_ROUTER_V38"
+LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37))")
 DEFAULT_HOST = Path("/home/box/sand-host/host-main.cjs")
 DEFAULT_BACKUP = Path("/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock")
 LEGACY_BACKUPS = (
@@ -32,7 +32,7 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 
 
 EXECUTOR_CODE = r'''
-// GROKBOT_MODEL_ROUTER_V37: version-gated Codex SDK and OpenRouter executor.
+// GROKBOT_MODEL_ROUTER_V38: version-gated Codex SDK and OpenRouter executor.
 function loadGrokBotRouterConfig() {
   const configPath = "/home/box/sand-data/grokbot-router/provider.json";
   try {
@@ -256,7 +256,7 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 
 
 SESSION_CODE = r'''
-      // GROKBOT_MODEL_ROUTER_V37: route enabled sessions through the provider adapter.
+      // GROKBOT_MODEL_ROUTER_V38: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
@@ -333,6 +333,25 @@ def patch_text(source: str) -> str:
     )
     if session_count != 1:
         raise PatchError(f"Session anchor count was {session_count}; expected 1")
+
+    # `resolveBoxId()` is already evaluated immediately before Grok creates the
+    # primary inference session. In Grok Bot 0.30.0 it is the only stable,
+    # Bot-specific identifier available at that boundary; request IDs and
+    # lineage values are turn-scoped. Forward it without changing stock
+    # behavior so direct chats and channel turns share the addressed Bot's
+    # router state.
+    identity_pattern = re.compile(r"(const mainSessionOptions = \{\n)(\s+modelId:)")
+    source, identity_count = identity_pattern.subn(
+        lambda match: (
+            f"{match.group(1)}"
+            "          ...(typeof boxId === \"string\" && boxId ? { botId: boxId } : {}),\n"
+            f"{match.group(2)}"
+        ),
+        source,
+        count=1,
+    )
+    if identity_count != 1:
+        raise PatchError(f"Session identity anchor count was {identity_count}; expected 1")
 
     return source
 

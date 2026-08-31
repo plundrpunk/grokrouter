@@ -9,7 +9,8 @@
   "requiredAnchors": [
     "function createMockPromptExecutor(options2)",
     "createSession(onRequestId, sessionOptions)",
-    "const mockResponse = process.env.SAND_AGENT_MOCK_RESPONSE;"
+    "const mockResponse = process.env.SAND_AGENT_MOCK_RESPONSE;",
+    "const mainSessionOptions = {"
   ],
-  "routerMarker": "GROKBOT_MODEL_ROUTER_V37"
+  "routerMarker": "GROKBOT_MODEL_ROUTER_V38"
 }

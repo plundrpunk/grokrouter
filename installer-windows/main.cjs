@@ -511,9 +511,10 @@ async function updateNativeWorkflows(client, pageSession, operation = "sync") {
   if (stats.unavailable) log(`${stats.unavailable} Bot or channel workflow stores were unavailable; run Repair after opening them.`);
   if (stats.conflicts) log(`${stats.conflicts} user-owned slash commands were preserved because their names conflict.`);
   if (operation === "remove") {
-    log(`Removed ${stats.removed} GrokRouter command entries from ${stats.bots} Bots and channels.`);
+    log(`Removed ${stats.removed} GrokRouter command entries from Grok Bot's shared workflow library.`);
   } else {
-    log(`Registered ${stats.installed + stats.updated} GrokRouter command entries across ${stats.bots} Bots and channels.`);
+    log(`Verified ${stats.installed + stats.updated + (stats.unchanged || 0)} unique GrokRouter commands for ${stats.bots} Bots and channels.`);
+    if (stats.removed) log(`Removed ${stats.removed} duplicate command entries left by an earlier beta.`);
   }
   return stats;
 }

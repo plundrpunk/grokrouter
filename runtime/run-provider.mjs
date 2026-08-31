@@ -151,6 +151,37 @@ export function addressedRouterControlText(input) {
   return trimmed.slice(slashIndex).trim();
 }
 
+function stringLeaves(value, depth = 0, results = [], seen = new Set()) {
+  if (depth > 8 || value == null || results.length >= 256) return results;
+  if (typeof value === "string") {
+    results.push(value);
+    return results;
+  }
+  if (typeof value !== "object" || seen.has(value)) return results;
+  seen.add(value);
+  for (const child of (Array.isArray(value) ? value : Object.values(value))) {
+    stringLeaves(child, depth + 1, results, seen);
+    if (results.length >= 256) break;
+  }
+  return results;
+}
+
+export function structuredRouterControlText(messages) {
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const role = messageRole(message);
+    if (role !== "user" && role !== "human") continue;
+    const candidates = stringLeaves(message?.content ?? message);
+    for (let candidateIndex = candidates.length - 1; candidateIndex >= 0; candidateIndex -= 1) {
+      const candidate = extractUserQuery(candidates[candidateIndex]);
+      const addressed = addressedRouterControlText(candidate);
+      if (ROUTER_CONTROL_PREFIX.test(addressed)) return addressed;
+    }
+    return "";
+  }
+  return "";
+}
+
 function objectKeyPaths(value, depth = 0, prefix = "", results = [], seen = new Set()) {
   if (depth > 4 || value == null || typeof value !== "object" || seen.has(value)) return results;
   seen.add(value);
@@ -1862,6 +1893,7 @@ export async function runTurn(input, dependencies = {}) {
     }
   }
   const controlText = nativeWorkflowControlText(messages)
+    || structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation
     ? null
