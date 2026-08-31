@@ -156,7 +156,7 @@ bash "$PAYLOAD/remote/install.sh" \
   --no-restart \
   >/dev/null
 
-grep -q 'GROKBOT_MODEL_ROUTER_V41' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V42' "$TEST_HOST"
 grep -q 'appendGrokBotRouterHostError' "$TEST_HOST"
 grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
@@ -227,7 +227,7 @@ ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
-grep -q 'GROKBOT_MODEL_ROUTER_V41' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V42' "$TEST_HOST"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \

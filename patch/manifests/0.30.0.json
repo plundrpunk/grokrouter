@@ -12,5 +12,5 @@
     "const mockResponse = process.env.SAND_AGENT_MOCK_RESPONSE;",
     "const mainSessionOptions = {"
   ],
-  "routerMarker": "GROKBOT_MODEL_ROUTER_V41"
+  "routerMarker": "GROKBOT_MODEL_ROUTER_V42"
 }

@@ -102,7 +102,8 @@ class RouterPatchTests(unittest.TestCase):
         self.assertEqual(self.host.read_text().count('{ botId: typeof boxId === "string"'), 1)
         self.assertIn('grokBotRouterControlText: rawTranscriptText', self.host.read_text())
         self.assertIn('grokBotRouterReceiptReplay: true', self.host.read_text())
-        self.assertIn('rememberGrokBotRouterControlReceipt(result.text)', self.host.read_text())
+        self.assertIn('rememberGrokBotRouterControlReceipt(result.text, this.sessionOptions)', self.host.read_text())
+        self.assertIn('lineage?.rootParentRequestId', self.host.read_text())
         self.assertEqual(self.backup.read_text(), STOCK_SOURCE)
         self.assertTrue(router_patch.doctor(self.host, self.backup, self.manifest)["ok"])
 
