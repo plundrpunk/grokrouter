@@ -130,7 +130,7 @@ for required in \
     exit 1
   fi
 done
-for skill_name in provider models model reasoning router; do
+for skill_name in provider models model reasoning router doctor; do
   if [[ ! -f "$PAYLOAD_ROOT/skills/$skill_name/SKILL.md" ]]; then
     printf 'ERROR: payload is missing the /%s discovery skill\n' "$skill_name" >&2
     exit 1
@@ -262,7 +262,7 @@ fi
 # its native slash menu. Link only empty names or links already owned by this
 # installation; never overwrite a user's existing skill with a generic name.
 mkdir -p "$GROK_SKILLS_ROOT"
-for skill_name in provider models model reasoning router; do
+for skill_name in provider models model reasoning router doctor; do
   skill_source="$INSTALL_ROOT/skills/$skill_name"
   skill_link="$GROK_SKILLS_ROOT/$skill_name"
   if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then

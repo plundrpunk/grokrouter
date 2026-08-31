@@ -182,7 +182,7 @@ else:
     print("  Credential: not configured")
 PY
     printf 'Slash discovery\n'
-    for skill_name in provider models model reasoning router; do
+    for skill_name in provider models model reasoning router doctor; do
       skill_source="$INSTALL_ROOT/skills/$skill_name"
       skill_link="$GROK_SKILLS_ROOT/$skill_name"
       if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
@@ -262,7 +262,7 @@ PY
     stop_watchdog
     python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --json
     update_config enabled false
-    for skill_name in provider models model reasoning router; do
+    for skill_name in provider models model reasoning router doctor; do
       skill_source="$INSTALL_ROOT/skills/$skill_name"
       skill_link="$GROK_SKILLS_ROOT/$skill_name"
       if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then

@@ -107,7 +107,7 @@ tar -xzf "$ARCHIVE" -C "$TEMPORARY"
 PAYLOAD="$TEMPORARY/grokbot-router-payload"
 (cd "$PAYLOAD" && shasum -a 256 -c SHA256SUMS >/dev/null)
 [[ "$(cat "$PAYLOAD/VERSION")" == "$(node -p "require('$PROJECT_ROOT/package.json').version")" ]]
-for skill_name in provider models model reasoning router; do
+for skill_name in provider models model reasoning router doctor; do
   [[ -f "$PAYLOAD/skills/$skill_name/SKILL.md" ]]
   grep -q '^user-invocable: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
@@ -140,7 +140,7 @@ grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
 [[ -L "$TEST_BIN/grokbot-router" ]]
 [[ -x "$TEST_RUNTIME/bin/grokbot-router-watchdog" ]]
-for skill_name in provider models model reasoning router; do
+for skill_name in provider models model reasoning router doctor; do
   [[ -L "$TEST_GROK_SKILLS/$skill_name" ]]
   [[ "$(readlink "$TEST_GROK_SKILLS/$skill_name")" == "$TEST_RUNTIME/skills/$skill_name" ]]
 done
@@ -214,7 +214,7 @@ ROUTER_WATCHDOG_ENABLED=0 \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 "$TEST_BIN/grokbot-router" uninstall >/dev/null
 cmp "$HOST_FIXTURE" "$TEST_HOST"
-for skill_name in provider models model router; do
+for skill_name in provider models model router doctor; do
   [[ ! -e "$TEST_GROK_SKILLS/$skill_name" && ! -L "$TEST_GROK_SKILLS/$skill_name" ]]
 done
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"

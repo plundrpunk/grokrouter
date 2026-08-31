@@ -34,6 +34,7 @@ test("extracts router controls only from exact or pure group-addressed input", (
   assert.equal(addressedRouterControlText("@Research Bot /provider"), "/provider");
   assert.equal(addressedRouterControlText("@[Research Bot](bot-123) /models"), "/models");
   assert.equal(addressedRouterControlText("@分析 Bot /model openai/gpt-5.6-luna"), "/model openai/gpt-5.6-luna");
+  assert.equal(addressedRouterControlText("@Research Bot /doctor"), "/doctor");
   assert.equal(
     addressedRouterControlText("Please ask @Research Bot to run /provider"),
     "Please ask @Research Bot to run /provider",
@@ -1175,6 +1176,14 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
     }, { fetchImpl: neverInfer });
     assert.match(status.text, /OpenRouter is active/);
     assert.match(status.text, /openai\/gpt-5\.6-luna/);
+
+    const doctor = await runTurn({
+      config,
+      messages: [user("/doctor")],
+      sessionOptions: { botId: "brand-new-bot" },
+    }, { fetchImpl: neverInfer });
+    assert.match(doctor.text, /Router 0\.1\.0-beta\./);
+    assert.equal(doctor.control, true);
 
     const pluralAlias = await runTurn({
       config,

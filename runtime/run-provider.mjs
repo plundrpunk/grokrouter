@@ -122,13 +122,13 @@ export function latestUserText(messages) {
   return "";
 }
 
-const ROUTER_CONTROL_PREFIX = /^\/(?:providers?|models?|reasoning|router)(?:\s|$)/i;
+const ROUTER_CONTROL_PREFIX = /^\/(?:providers?|models?|reasoning|router|doctor)(?:\s|$)/i;
 
 export function addressedRouterControlText(input) {
   if (typeof input !== "string") return "";
   const trimmed = input.trim();
   if (ROUTER_CONTROL_PREFIX.test(trimmed)) return trimmed;
-  const slashIndex = trimmed.search(/\/(?:providers?|models?|reasoning|router)(?:\s|$)/i);
+  const slashIndex = trimmed.search(/\/(?:providers?|models?|reasoning|router|doctor)(?:\s|$)/i);
   if (slashIndex <= 0) return trimmed;
   const address = trimmed.slice(0, slashIndex).trim();
   // Grok group messages can retain a leading @Bot mention in the visible
@@ -1619,9 +1619,10 @@ async function controlResult(config, key, state, input) {
       "• /reasoning minimal|low|medium|high|xhigh — change effort",
       "• /router reset — start a fresh provider thread",
       "• /router doctor — show installation health",
+      "• /doctor — show the same installation health",
     ].join("\n"));
   }
-  if (command === "/router doctor") return result(await doctorText(config, state));
+  if (command === "/router doctor" || command === "/doctor") return result(await doctorText(config, state));
   if (command === "/router reset") {
     await persist({
       threadId: null,
