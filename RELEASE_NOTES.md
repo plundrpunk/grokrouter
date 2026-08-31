@@ -7,7 +7,7 @@ Group routing, native control discovery, provider-aware delegation, and a Window
 - User-invocable skills publish `/provider`, `/models`, `/model`, `/reasoning`, `/router`, and `/doctor` through Grok's native slash discovery. Existing user skills win name conflicts, Doctor reports them, and uninstall removes only GrokRouter-owned links.
 - `/doctor` is a first-class alias for `/router doctor` and never reaches model inference.
 - Explicit OpenRouter delegation requests force a supplied orchestration tool or `GetDynamicTools`. When Grok supplies no actionable schemas, the router states that boundary instead of pretending a child started.
-- Restored the native Windows x64/Arm64 installer source, exact signed-app/version gate, sandboxed renderer, loopback/noVNC transport, restore path, cross-architecture packaging, checksum generation, and Windows CI. Native Windows setup and live acceptance remain pending, so this is a source preview rather than a public compatibility claim.
+- Restored the native Windows x64/Arm64 installer source, exact signed-app/version gate, sandboxed renderer, loopback/noVNC transport, restore path, cross-architecture packaging, checksum generation, and Windows CI. Both ZIP and Inno Setup architectures build on the native runner; Windows launch/install and live Grok Bot acceptance remain pending, so this is a source preview rather than a public compatibility claim.
 - Automated coverage now spans group identity/isolation, addressed controls, slash-skill ownership, real-versus-invented delegation, Mac contracts, and Windows source/package contracts.
 
 ## GrokRouter 0.1.0-beta.39

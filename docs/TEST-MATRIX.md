@@ -19,7 +19,7 @@ Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.
 | Full payload installs pinned SDK and management CLI | Synthetic end-to-end install | Fresh official Grok Bot 0.30.0 install completed with Codex CLI/SDK 0.151.0 | Pass |
 | Native Mac installer compiles for macOS 12+ | Swift typecheck/build/code-sign verification | UI inspected on the verified test Mac | Pass |
 | Native Windows installer preserves local-only and restore gates | Node source-contract suite, sandbox/CSP assertions, exact signed-app/version checks | Native Windows live cycle not yet run on this candidate | Automated pass; live pending |
-| Windows x64 and Arm64 application packaging | Cross-platform Electron packaging plus SHA-256 verification; Windows CI requires native Inno Setup outputs | Native Windows launch/install not yet run on this candidate | Source ZIP builds pass; setup/live pending |
+| Windows x64 and Arm64 application packaging | Cross-platform Electron packaging plus SHA-256 verification; native Windows CI requires and produced both Inno Setup outputs | Native Windows launch/install not yet run on this candidate | ZIP and Setup builds pass; live pending |
 | Installer survives a Grok computer reconnect | Swift regression checks for chunked transfer and encoded output markers | Live reconnect occurred; installer retried and completed | Pass |
 | Installer reports success across host restart | Delayed-restart shell check; transport and encoded install-marker checks | Repeated reinstall exposed a redundant acknowledgement race; after removing it, the same live reinstall completed with `Installed with OpenRouter selected` and no false retry | Pass |
 | Verified stock restore and reinstall | Persistent stock-backup path, exact-hash/anchor gate, prompt reset, paced RFB transfer, stable VNC reuse, accurate OCR, and pre-restart restore sentinel assertions | Exact beta.38 installed, restored stock with an authoritative success receipt, reinstalled with OpenRouter selected, and passed a new-Bot doctor | Pass on beta.38 |
@@ -36,6 +36,14 @@ Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.
 | OpenRouter uses Grok sub-agent tool | Provider-aware tests force an offered orchestration tool or `GetDynamicTools`, refuse to invent a child when schemas are absent, and cover tagged-completion revival, receipt ordering, replay, fallback, and concurrent claims | Beta.10 reached repeated dynamic rounds but did not return the child; beta.32 stopped at the preceding zero-host-schema Shell gate | Automated behavior pass; latest live path still failed |
 
 Do not change a Pending row to Pass from code inspection alone. Capture the exact prompt, visible result, router audit event, and provider/model status for each live proof.
+
+## 2026-08-31 beta.40 source evidence
+
+- Commit `13bf2c0` and immutable tag `source-v0.1.0-beta.40` contain the group-state, native slash-discovery, provider-aware delegation, Windows source-preview, and release-version work.
+- The local `npm test` pass covered 40 runtime tests, four patch tests, the complete payload/install/restore test, and seven Windows source/package contracts.
+- Local builds produced an ad-hoc-signed Arm64 Mac app plus checksummed Windows x64 and Arm64 ZIPs. Both Windows archives contained the six slash skills and no macOS metadata entries; their executables identified as PE32+ x86-64 and Aarch64 respectively.
+- [GitHub CI run 33360355061](https://github.com/promptadvisers/grokrouter/actions/runs/33360355061) passed both jobs. The Windows Server runner built and uploaded x64/Arm64 ZIPs, checksums, and required native Inno Setup executables; the Mac runner built and uploaded its package.
+- This evidence proves source, tests, and packaging only. It does not replace the exact-candidate Mac reinstall/fresh-Bot gate or a native Windows launch → install → restore → reinstall → fresh-Bot cycle.
 
 ## 2026-08-30 beta.39 recovery evidence
 
