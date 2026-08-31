@@ -9,7 +9,7 @@ const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
-const ROUTER_VERSION = "0.1.0-beta.42";
+const ROUTER_VERSION = "0.1.0-beta.43";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
 const CHANNEL_CONTROL_LATCH_TTL_MS = 30_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
@@ -238,12 +238,43 @@ function controlProbe(messages) {
 
 const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_(?:COMMAND:\s*\/|CONTROL:\s*)(providers?|models?|reasoning|router|doctor)(?:\s|$)/ig;
 
+export function hostRouterControlText(messages, sessionOptions = {}) {
+  const raw = typeof sessionOptions.grokBotRouterControlText === "string"
+    ? sessionOptions.grokBotRouterControlText
+    : "";
+  if (!raw.trim()) return "";
+  const visible = extractUserQuery(raw).trim();
+  if (!visible) return "";
+  const addressed = addressedRouterControlText(visible);
+  if (ROUTER_CONTROL_PREFIX.test(addressed)) return addressed;
+
+  // A selected native workflow can expose `provider codex` in the stock host
+  // transcript even though the composer visibly rendered `/provider codex`.
+  // Accept that slashless form only when the matching registered workflow
+  // marker is present. Ordinary prose never gains command authority here.
+  const bare = visible.match(/^(providers?|models?|reasoning|router|doctor)(?:\s+([\s\S]+))?$/i);
+  if (!bare) return "";
+  const commandName = bare[1].toLowerCase();
+  const hasMatchingMarker = (Array.isArray(messages) ? messages : []).some((message) => {
+    const messageText = collectText(message?.content ?? message);
+    return [...messageText.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)]
+      .some((match) => match[1].toLowerCase() === commandName);
+  });
+  if (!hasMatchingMarker) return "";
+  const argument = String(bare[2] || "").trim();
+  return argument ? `/${commandName} ${argument}` : `/${commandName}`;
+}
+
 export function nativeWorkflowControlText(messages) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
     const message = messages[index];
     const raw = collectText(message?.content ?? message);
     const markers = [...raw.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
-    if (markers.length === 0) continue;
+    if (markers.length === 0) {
+      const role = messageRole(message);
+      if ((role === "user" || role === "human") && extractUserQuery(raw)) return "";
+      continue;
+    }
     const base = `/${markers[markers.length - 1][1].toLowerCase()}`;
     const commandName = base.slice(1);
     const visible = extractUserQuery(raw).trim();
@@ -1959,9 +1990,12 @@ export async function runTurn(input, dependencies = {}) {
       && await hasRecentChannelControl(config)) {
     return suppressed("channel-control-follow-on");
   }
-  const controlText = nativeWorkflowControlText(messages)
-    || structuredRouterControlText(messages)
+  const latestVisibleControl = structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
+  const controlText = hostRouterControlText(messages, sessionOptions)
+    || (ROUTER_CONTROL_PREFIX.test(latestVisibleControl) ? latestVisibleControl : "")
+    || nativeWorkflowControlText(messages)
+    || latestVisibleControl;
   const control = automationContinuation
     ? null
     : await controlResult(config, key, state, controlText);

@@ -16,6 +16,7 @@ import {
   structuredRouterControlText,
   extractUserQuery,
   hasDeliveryAfterLatestQuery,
+  hostRouterControlText,
   latestUserText,
   nativeWorkflowControlText,
   normalizeTools,
@@ -95,6 +96,30 @@ test("extracts deterministic controls from Grok's registered workflow envelope o
     "/provider",
   );
   assert.equal(nativeWorkflowControlText([user("doctor")]), "");
+});
+
+test("recovers exact host controls without granting command authority to prose", () => {
+  const providerWorkflow = user([
+    "# GrokRouter provider control",
+    "GROKROUTER_NATIVE_CONTROL: PROVIDER",
+  ].join("\n\n"));
+  assert.equal(
+    hostRouterControlText([providerWorkflow], { grokBotRouterControlText: "/provider codex" }),
+    "/provider codex",
+  );
+  assert.equal(
+    hostRouterControlText([providerWorkflow], { grokBotRouterControlText: "provider codex" }),
+    "/provider codex",
+  );
+  assert.equal(
+    hostRouterControlText([], { grokBotRouterControlText: "provider codex" }),
+    "",
+  );
+  assert.equal(
+    hostRouterControlText([providerWorkflow], { grokBotRouterControlText: "please use /provider codex" }),
+    "",
+  );
+  assert.equal(nativeWorkflowControlText([providerWorkflow, user("hello there")]), "");
 });
 
 test("extracts the newest visible Grok user query", () => {
@@ -1285,7 +1310,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.42: OK/);
+    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.43: OK/);
     assert.equal(nativeDoctor.control, true);
 
     const nativeProvider = await runTurn({
@@ -1327,6 +1352,58 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       assert.match(handled.text, expected);
       assert.equal(handled.control, true);
     }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a current provider switch outranks a retained bare native workflow", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-provider-switch-"));
+  const config = {
+    provider: "openrouter",
+    providers: ["codex", "openrouter"],
+    codexModel: "gpt-5.6-sol",
+    openRouterModel: "anthropic/claude-sonnet-4.6",
+    statePath: join(root, "states.json"),
+  };
+  const retainedProviderWorkflow = user([
+    "# GrokRouter provider control",
+    "GROKROUTER_NATIVE_CONTROL: PROVIDER",
+    "<user_query>provider</user_query>",
+  ].join("\n\n"));
+  const neverInfer = async () => { throw new Error("provider control leaked to model inference"); };
+  try {
+    const literal = await runTurn({
+      config,
+      messages: [retainedProviderWorkflow, user("/provider codex")],
+      sessionOptions: {
+        botId: "literal-provider-switch",
+        grokBotRouterControlText: "/provider codex",
+      },
+    }, { fetchImpl: neverInfer });
+    assert.equal(literal.provider, "codex");
+    assert.equal(literal.model, "gpt-5.6-sol");
+    assert.match(literal.text, /Switched this bot from OpenRouter/);
+
+    const withoutHostTranscript = await runTurn({
+      config,
+      messages: [retainedProviderWorkflow, user("/provider codex")],
+      sessionOptions: { botId: "literal-provider-switch-without-host-transcript" },
+    }, { fetchImpl: neverInfer });
+    assert.equal(withoutHostTranscript.provider, "codex");
+    assert.equal(withoutHostTranscript.model, "gpt-5.6-sol");
+
+    const native = await runTurn({
+      config,
+      messages: [retainedProviderWorkflow],
+      sessionOptions: {
+        botId: "native-provider-switch",
+        grokBotRouterControlText: "provider codex",
+      },
+    }, { fetchImpl: neverInfer });
+    assert.equal(native.provider, "codex");
+    assert.equal(native.model, "gpt-5.6-sol");
+    assert.match(native.text, /Switched this bot from OpenRouter/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

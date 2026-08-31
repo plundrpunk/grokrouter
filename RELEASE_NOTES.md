@@ -1,4 +1,16 @@
-# GrokRouter 0.1.0-beta.40 candidate
+# GrokRouter 0.1.0-beta.43 hotfix
+
+Provider-switch argument preservation for Grok Bot 0.30.0.
+
+- Fixed `/provider codex` and `/provider openrouter` being reduced to bare `/provider` when Grok retained an older native workflow envelope in the transcript.
+- The current exact host transcript and latest visible slash command now outrank retained workflow metadata.
+- Grok's slash-chip form, which can expose `provider codex` without the leading slash, is accepted only when the matching registered GrokRouter workflow marker is present.
+- Natural-language prose containing a provider command remains ordinary model input and does not gain control authority.
+- Added regression coverage for the literal command, the slash-chip form, stale workflow precedence, and the prose safety boundary.
+
+Existing installations must rebuild GrokRouter from current source and click **Install Router** to replace the runtime. If Codex is enabled, complete **Start Codex Sign-in** afterward.
+
+## GrokRouter 0.1.0-beta.40 candidate
 
 Group routing, native control discovery, provider-aware delegation, and a Windows source preview for Grok Bot 0.30.0.
 
