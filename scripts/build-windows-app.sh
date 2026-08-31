@@ -21,6 +21,11 @@ if [[ "$ARCH" != "x64" && "$ARCH" != "arm64" ]]; then
   printf 'ERROR: Windows architecture must be x64 or arm64\n' >&2
   exit 2
 fi
+if [[ "${ROUTER_WINDOWS_REQUIRE_SIGNING:-0}" == "1" \
+  && ( -z "${ROUTER_WINDOWS_SIGN_PFX:-}" || -z "${ROUTER_WINDOWS_SIGN_PASSWORD:-}" ) ]]; then
+  printf 'ERROR: release mode requires ROUTER_WINDOWS_SIGN_PFX and ROUTER_WINDOWS_SIGN_PASSWORD\n' >&2
+  exit 1
+fi
 
 STAGE_ROOT="$(mktemp -d -t grokrouter-windows.XXXXXX)"
 cleanup() {

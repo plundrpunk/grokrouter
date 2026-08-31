@@ -11,6 +11,12 @@ const payloadBuild = await readFile(new URL("../scripts/build-payload.sh", impor
 const signing = await readFile(new URL("../scripts/sign-windows.ps1", import.meta.url), "utf8");
 const setup = await readFile(new URL("../scripts/build-windows-setup.ps1", import.meta.url), "utf8");
 const ciWorkflow = await readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
+const rootPackage = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
+const windowsPackage = JSON.parse(await readFile(new URL("../installer-windows/package.json", import.meta.url), "utf8"));
+
+test("Windows installer version matches the shared release version", () => {
+  assert.equal(windowsPackage.version, rootPackage.version);
+});
 
 test("Windows installer keeps the exact compatibility and local-only gates", () => {
   assert.match(main, /SUPPORTED_GROK_VERSION = "0\.30\.0"/);
@@ -82,7 +88,9 @@ test("Windows packaging covers both official architectures", () => {
   assert.doesNotMatch(payloadBuild, /require\('\$PROJECT_ROOT\/package\.json'\)/);
 });
 
-test("public releases fail closed without Authenticode credentials", () => {
+test("Windows release mode fails closed without Authenticode credentials", () => {
+  assert.match(build, /ROUTER_WINDOWS_REQUIRE_SIGNING/);
+  assert.match(build, /release mode requires ROUTER_WINDOWS_SIGN_PFX and ROUTER_WINDOWS_SIGN_PASSWORD/);
   assert.match(build, /ROUTER_WINDOWS_SIGN_PFX/);
   assert.match(signing, /signtool\.exe/);
   assert.match(signing, /\/tr "http:\/\/timestamp\.digicert\.com"/);
