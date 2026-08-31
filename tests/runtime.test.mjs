@@ -1082,29 +1082,37 @@ test("a group-addressed control changes only the addressed Bot's state", async (
   }
 });
 
-test("a channel replay of a router control receipt is suppressed before inference", async () => {
-  const root = await mkdtemp(join(tmpdir(), "grokbot-router-channel-receipt-replay-"));
+test("a channel control suppresses host-shaped follow-on turns across Bots", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-channel-follow-on-"));
   const config = {
     provider: "openrouter",
     providers: ["codex", "openrouter"],
     statePath: join(root, "states.json"),
     auditPath: join(root, "audit.jsonl"),
+    channelControlLatchPath: join(root, "channel-control-latch.json"),
   };
-  const neverInfer = async () => { throw new Error("router receipt replay leaked to model inference"); };
+  const neverInfer = async () => { throw new Error("channel control follow-on leaked to model inference"); };
   try {
+    const control = await runTurn({
+      config,
+      messages: [user("@Social Guru /provider")],
+      sessionOptions: { botId: "social-guru" },
+    }, { fetchImpl: neverInfer });
+    assert.equal(control.control, true);
+
     const result = await runTurn({
       config,
-      messages: [user("Channel orchestration envelope after the router delivered its receipt")],
+      messages: [user("Channel orchestration follow-on after the router delivered its receipt")],
       sessionOptions: {
-        botId: "social-guru",
-        grokBotRouterControlText: "OpenRouter is active for this bot. Model: anthropic/claude-sonnet-4.6. Reasoning: medium.",
-        grokBotRouterReceiptReplay: true,
+        botId: "demo-bot",
+        skipLabeling: true,
+        lineage: { rootParentRequestId: "channel-run-root" },
       },
     }, { fetchImpl: neverInfer });
     assert.equal(result.text, "");
     assert.equal(result.alreadyDelivered, true);
     const audit = await readFile(join(root, "audit.jsonl"), "utf8");
-    assert.match(audit, /"reason":"channel-control-receipt-replay"/);
+    assert.match(audit, /"reason":"channel-control-follow-on"/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

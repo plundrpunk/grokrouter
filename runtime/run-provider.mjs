@@ -11,6 +11,7 @@ const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
 const ROUTER_VERSION = "0.1.0-beta.42";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
+const CHANNEL_CONTROL_LATCH_TTL_MS = 30_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
   "sendtouser",
   "sendmessage",
@@ -1645,6 +1646,38 @@ async function appendAudit(config, event) {
   }
 }
 
+function channelControlLatchPath(config) {
+  return config.channelControlLatchPath || join(runtimeDirectory, "channel-control-latch.json");
+}
+
+async function rememberChannelControl(config) {
+  try {
+    const pathname = channelControlLatchPath(config);
+    await mkdir(dirname(pathname), { recursive: true });
+    await writeFile(pathname, JSON.stringify({ completedAt: Date.now() }), { mode: 0o600 });
+  } catch {
+    // A receipt latch improves channel hygiene but must never break a control.
+  }
+}
+
+async function hasRecentChannelControl(config) {
+  try {
+    const value = JSON.parse(await readFile(channelControlLatchPath(config), "utf8"));
+    const completedAt = Number(value?.completedAt || 0);
+    return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
+  } catch {
+    return false;
+  }
+}
+
+function isChannelControlFollowOn(sessionOptions) {
+  const hasFreshRawUserText = typeof sessionOptions.grokBotRouterControlText === "string"
+    && sessionOptions.grokBotRouterControlText.trim();
+  return !hasFreshRawUserText
+    && Object.prototype.hasOwnProperty.call(sessionOptions, "skipLabeling")
+    && typeof sessionOptions.lineage?.rootParentRequestId === "string";
+}
+
 function providerLabel(provider) {
   return provider === "openrouter" ? "OpenRouter" : "Codex SDK";
 }
@@ -1887,9 +1920,6 @@ export async function runTurn(input, dependencies = {}) {
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
     };
   };
-  if (sessionOptions.grokBotRouterReceiptReplay === true) {
-    return suppressed("channel-control-receipt-replay");
-  }
   if (hasDeliveryAfterLatestQuery(messages)) {
     if (turnFingerprint && state.completedTurnFingerprint !== turnFingerprint) {
       const updated = await mergeState(config, key, state, {
@@ -1928,6 +1958,7 @@ export async function runTurn(input, dependencies = {}) {
     ? null
     : await controlResult(config, key, state, controlText);
   if (control) {
+    await rememberChannelControl(config);
     await appendAudit(config, {
       event: "control_turn",
       sessionId: state.sessionId,
@@ -1937,6 +1968,11 @@ export async function runTurn(input, dependencies = {}) {
       model: state.model,
     });
     return { ok: true, ...control };
+  }
+  if (!automationContinuation
+      && isChannelControlFollowOn(sessionOptions)
+      && await hasRecentChannelControl(config)) {
+    return suppressed("channel-control-follow-on");
   }
   const completedTurnStillFresh = Number(state.completedTurnAt || 0) > 0
     && Date.now() - Number(state.completedTurnAt || 0) < COMPLETED_TURN_TTL_MS;

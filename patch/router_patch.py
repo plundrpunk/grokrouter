@@ -20,8 +20,8 @@ import time
 from typing import Any
 
 
-MARKER = "GROKBOT_MODEL_ROUTER_V42"
-LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41))")
+MARKER = "GROKBOT_MODEL_ROUTER_V43"
+LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42))")
 DEFAULT_HOST = Path("/home/box/sand-host/host-main.cjs")
 DEFAULT_BACKUP = Path("/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock")
 LEGACY_BACKUPS = (
@@ -32,35 +32,7 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 
 
 EXECUTOR_CODE = r'''
-// GROKBOT_MODEL_ROUTER_V42: version-gated Codex SDK and OpenRouter executor.
-const grokBotRouterControlReceipts = new Map();
-function pruneGrokBotRouterControlReceipts(now = Date.now()) {
-  for (const [fingerprint, createdAt] of grokBotRouterControlReceipts) {
-    if (now - createdAt > 60_000) grokBotRouterControlReceipts.delete(fingerprint);
-  }
-}
-function grokBotRouterControlReceiptFingerprints(text, sessionOptions) {
-  const values = [];
-  if (typeof text === "string" && text.trim()) values.push(`text:${text.trim()}`);
-  const rootRequestId = sessionOptions?.lineage?.rootParentRequestId;
-  const parentRequestId = sessionOptions?.lineage?.parentRequestId;
-  if (typeof rootRequestId === "string" && rootRequestId) values.push(`root:${rootRequestId}`);
-  else if (typeof parentRequestId === "string" && parentRequestId) values.push(`parent:${parentRequestId}`);
-  return values.map((value) => require("node:crypto").createHash("sha256").update(value).digest("hex"));
-}
-function rememberGrokBotRouterControlReceipt(text, sessionOptions) {
-  const fingerprints = grokBotRouterControlReceiptFingerprints(text, sessionOptions);
-  if (!fingerprints.length) return;
-  pruneGrokBotRouterControlReceipts();
-  const now = Date.now();
-  for (const fingerprint of fingerprints) grokBotRouterControlReceipts.set(fingerprint, now);
-}
-function isRecentGrokBotRouterControlReceipt(text, sessionOptions) {
-  const fingerprints = grokBotRouterControlReceiptFingerprints(text, sessionOptions);
-  if (!fingerprints.length) return false;
-  pruneGrokBotRouterControlReceipts();
-  return fingerprints.some((fingerprint) => grokBotRouterControlReceipts.has(fingerprint));
-}
+// GROKBOT_MODEL_ROUTER_V43: version-gated Codex SDK and OpenRouter executor.
 function loadGrokBotRouterConfig() {
   const configPath = "/home/box/sand-data/grokbot-router/provider.json";
   try {
@@ -204,17 +176,11 @@ function runGrokBotRouter(config, messages, tools, sessionOptions) {
       resolve(payload);
       });
     });
-    const bridgeSessionOptions = {
-      ...sessionOptions,
-      ...(isRecentGrokBotRouterControlReceipt(sessionOptions?.grokBotRouterControlText, sessionOptions)
-        ? { grokBotRouterReceiptReplay: true }
-        : {})
-    };
     child.stdin.end(JSON.stringify({
       config,
       messages,
       tools: serializeGrokBotRouterTools(tools),
-      sessionOptions: bridgeSessionOptions
+      sessionOptions
     }));
   });
 }
@@ -236,10 +202,6 @@ var GrokBotRouterPromptExecutor = class extends MockPromptExecutor {
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           bridgeError: true
         };
-      })
-      .then((result) => {
-        if (result?.control === true) rememberGrokBotRouterControlReceipt(result.text, this.sessionOptions);
-        return result;
       });
     const delegatedPromise = resultPromise.then((result) => {
       const providerToolCalls = Array.isArray(result.toolCalls) ? result.toolCalls : [];
@@ -294,7 +256,7 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 
 
 SESSION_CODE = r'''
-      // GROKBOT_MODEL_ROUTER_V42: route enabled sessions through the provider adapter.
+      // GROKBOT_MODEL_ROUTER_V43: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
