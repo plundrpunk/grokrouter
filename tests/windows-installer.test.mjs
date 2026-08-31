@@ -40,6 +40,22 @@ test("Windows installer preserves verified terminal transport and restore", () =
   assert.match(main, /quality: 55/);
   assert.match(main, /sha256sum -c -/);
   assert.match(main, /typeRemoteCommandsResilient/);
+  assert.match(main, /INSTALL_PHASES/);
+  assert.match(main, /INSTALLFAILED/);
+  assert.match(main, /Copy safe diagnostics/);
+  assert.match(main, /typeRemoteCommand\("clear"/);
+});
+
+test("Windows installer exposes safe recovery without retaining secrets", () => {
+  assert.match(html, /id="recovery"/);
+  assert.match(html, /Try installation again/);
+  assert.match(html, /Copy safe diagnostics/);
+  assert.match(html, /Open support issue/);
+  assert.match(preload, /grokrouter:copy-diagnostics/);
+  assert.match(preload, /grokrouter:open-support/);
+  assert.match(main, /This report intentionally excludes credentials, conversations, and Bot files/);
+  assert.match(main, /\[REDACTED_KEY\]/);
+  assert.doesNotMatch(renderer, /lastInstallPayload|savedInstallPayload/);
 });
 
 test("Windows installer registers native commands through Grok's workflow service", () => {

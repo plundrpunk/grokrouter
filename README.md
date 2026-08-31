@@ -60,7 +60,17 @@ Windows builds exist for developers to inspect, but Windows is not yet the begin
 
 Open the official Grok Bot app. Select any Bot, click **Open computer**, and leave Grok Bot open.
 
-### 2. Download and open GrokRouter
+### 2. Install and open GrokRouter
+
+The fastest path is one pinned command. Open your Mac's **Terminal**, paste this entire line, and press Return:
+
+```bash
+/usr/bin/curl --fail --silent --show-error --location https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.44/scripts/install-macos.sh --output /tmp/grokrouter-install.sh && /bin/bash /tmp/grokrouter-install.sh
+```
+
+It downloads the exact tagged source, builds GrokRouter locally, verifies it, installs it in your Applications folder, and opens it. It does not use `sudo`.
+
+If you prefer not to paste a Terminal command, use the equivalent ZIP path:
 
 1. Click the green **Code** button near the top of this GitHub page.
 2. Click **Download ZIP**.
@@ -74,7 +84,7 @@ The process is finished when Terminal says:
 GrokRouter is installed in your Applications folder. Opening it now...
 ```
 
-If macOS installs Apple Command Line Tools first, let that finish and then double-click **Install GrokRouter.command** again. If macOS asks whether to open the downloaded command, Control-click it, choose **Open**, and confirm **Open**. You never need to disable Gatekeeper or use `sudo`.
+If macOS installs Apple Command Line Tools first, let that finish and then run the same Terminal command again—or double-click **Install GrokRouter.command** again if you used the ZIP path. If macOS asks whether to open the downloaded command, Control-click it, choose **Open**, and confirm **Open**. You never need to disable Gatekeeper or use `sudo`.
 
 ### 3. Choose your model and click Install Router
 
@@ -115,16 +125,19 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 
 | What you see | What to do |
 | --- | --- |
-| Apple Command Line Tools are required | Finish Apple's installation, then double-click **Install GrokRouter.command** again. |
+| Apple Command Line Tools are required | Finish Apple's installation, then repeat whichever installation path you used. |
 | macOS will not open the command | Control-click **Install GrokRouter.command**, choose **Open**, then confirm **Open**. Do not disable Gatekeeper. |
 | `install Grok Bot 0.30.0 in Applications first` | Put the official app at `/Applications/Grok Bot.app`, open it once, then retry. |
 | Unsupported or changed Grok Bot version | Stop. Do not force the installation or change the version/hash checks. |
 | GrokRouter asks for a Bot computer | In Grok Bot, select any Bot and click **Open computer**. Leave it open while the installer continues. |
+| `Action needed` appears | Follow the large instruction in GrokRouter. It continues automatically after the Bot computer is available. |
+| Installation stopped while downloading dependencies | Confirm the Bot computer has internet access, then click **Try installation again**. |
+| Installation stopped with another error | Click **Copy safe diagnostics** and paste the report into a GitHub issue. It excludes credentials, conversations, and Bot files. |
 | Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
 
-If Doctor still reports a failure, copy its complete non-secret output into a GitHub issue or give it to your AI assistant. Never post an API key.
+If Doctor still reports a failure, copy its complete non-secret output into an [installation support issue](https://github.com/promptadvisers/grokrouter/issues/new?template=installation-failure.yml) or give it to your AI assistant. Never post an API key.
 
 ## Everyday commands
 

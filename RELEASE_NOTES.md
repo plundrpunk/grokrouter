@@ -1,4 +1,19 @@
-# GrokRouter 0.1.0-beta.43 hotfix
+# GrokRouter 0.1.0-beta.44
+
+Beginner-safe installer recovery for Grok Bot 0.30.0.
+
+- Every installation now carries a unique attempt ID and reports structured, numbered phases from the Bot computer back to GrokRouter.
+- A confirmed terminal failure stops within two checks instead of repeating a generic error until the six-minute completion timeout.
+- Dependency, payload, activation, adapter, and verification failures now explain the failed phase in plain English.
+- The installer exposes **Try installation again** and **Copy safe diagnostics** after a failure. Diagnostic reports include only platform, version, phase, and sanitized error lines; credentials, conversations, and Bot files are excluded.
+- Waiting for a Bot computer now becomes an explicit **Action needed** state after ten seconds.
+- Remote terminal state is cleared before each operation so an earlier error cannot poison a later retry.
+- Pinned npm downloads use bounded retries and timeouts so temporary registry failures can recover without hanging indefinitely.
+- Mac and Windows installer contracts cover the same structured failure and recovery behavior. Windows remains a source preview until native live acceptance passes.
+
+Existing installations must rebuild GrokRouter from current source and click **Install Router**. If Codex is enabled, complete **Codex sign-in** afterward.
+
+## GrokRouter 0.1.0-beta.43 hotfix
 
 Provider-switch argument preservation for Grok Bot 0.30.0.
 

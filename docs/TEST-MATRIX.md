@@ -1,6 +1,6 @@
 # Verification matrix
 
-Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.40.
+Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.44.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |
@@ -36,6 +36,15 @@ Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.
 | OpenRouter uses Grok sub-agent tool | Provider-aware tests force an offered orchestration tool or `GetDynamicTools`, refuse to invent a child when schemas are absent, and cover tagged-completion revival, receipt ordering, replay, fallback, and concurrent claims | Beta.10 reached repeated dynamic rounds but did not return the child; beta.32 stopped at the preceding zero-host-schema Shell gate | Automated behavior pass; latest live path still failed |
 
 Do not change a Pending row to Pass from code inspection alone. Capture the exact prompt, visible result, router audit event, and provider/model status for each live proof.
+
+## 2026-08-31 beta.44 automated installer evidence
+
+- The remote installer emits attempt-scoped phase and failure markers, including deterministic option and missing-command failures. A successful synthetic payload cycle emitted every phase from preflight through completion.
+- Mac and Windows installers clear stale terminal output before each operation, display numbered phase status, switch to an explicit action-needed state when no Bot computer appears, and stop after two confirmed terminal-error screens instead of repeating the generic error until the full timeout.
+- Recovery controls expose retry, credential-redacted diagnostic copying, and the installation-specific GitHub issue form. Tests assert that the Windows renderer does not retain an installation payload or cleared OpenRouter key.
+- Pinned npm installation now uses three bounded fetch retries plus explicit retry and request timeouts.
+- The local suite passed 45 runtime tests, four patch tests, the full payload/install/restore suite, Swift typechecking, and nine Windows contracts. The ad-hoc-signed Arm64 Mac app, source-installer path, ZIP integrity, and app bundle version were verified locally.
+- This is automated and local package evidence only. Beta.44 still requires the exact-artifact live install, restore, reinstall, and genuinely-new-Bot acceptance cycle before its live rows can be marked passed.
 
 ## 2026-08-31 beta.40 source evidence
 

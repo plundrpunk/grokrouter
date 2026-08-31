@@ -13,6 +13,12 @@ bash -n \
   "$PROJECT_ROOT/Install GrokRouter.command"
 python3 -m py_compile "$PROJECT_ROOT/patch/router_patch.py"
 node --check "$PROJECT_ROOT/runtime/run-provider.mjs"
+
+STRUCTURED_FAILURE="$(ROUTER_INSTALL_ATTEMPT=TEST1234 bash "$PROJECT_ROOT/remote/install.sh" --not-a-real-option 2>&1 || true)"
+grep -q 'GROKROUTER_TEST1234_INSTALL_FAILED_OPTIONS_UNKNOWN_OPTION' <<<"$STRUCTURED_FAILURE"
+PREFLIGHT_FAILURE="$(PATH=/usr/bin:/bin:/sbin ROUTER_INSTALL_ATTEMPT=PREF123 bash "$PROJECT_ROOT/remote/install.sh" --no-restart 2>&1 || true)"
+grep -q 'GROKROUTER_PREF123_PHASE_PREFLIGHT' <<<"$PREFLIGHT_FAILURE"
+grep -q 'GROKROUTER_PREF123_INSTALL_FAILED_PREFLIGHT_MISSING_COMMAND' <<<"$PREFLIGHT_FAILURE"
 /usr/bin/swiftc \
   -swift-version 5 \
   -target arm64-apple-macosx12.0 \
@@ -27,6 +33,7 @@ grep -q 'Reuse an already open computer' "$PROJECT_ROOT/installer/GrokBotRouterI
 grep -q 'let transportVNC = try await typeRemoteCommandsResilient' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'ensureTerminal' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'resetRemotePrompt' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'typeRemoteCommand("clear"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'key: "c", code: "KeyC"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Opening Terminal from the Bot desktop dock' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'clickRemoteDesktop' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -53,6 +60,13 @@ grep -q 'payload.b64' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'only completion authority' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'GROKBOT_ROUTER_COMMAND_ACCEPTED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'installPayload.*base64EncodedString' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'installAttempt: installAttempt' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'Try installation again' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'Open support issue' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'installation-failure.yml' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'Action needed' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'confirmationSentinel: "Welcome to Codex"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'confirmationSentinel: "GROKBOT_ROUTER_DOCTOR_DONE"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -77,7 +91,7 @@ grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'labelWithString: "GROK BOT 0.30.0"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'PRIVATE BETA' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
-grep -Fq 'contentRect: NSRect(x: 0, y: 0, width: 780, height: 790)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -Fq 'contentRect: NSRect(x: 0, y: 0, width: 780, height: 838)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -Fq 'NSStackView(views: [hero, modelCard, installCard, statusCard, activityLabel, scroll])' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'InstallerCardView' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'window.title = "GrokRouter"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -90,6 +104,8 @@ grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'GROKROUTER_APPLICATIONS_DIR' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'GROKROUTER_NO_OPEN' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'xcode-select --install' "$PROJECT_ROOT/scripts/install-macos.sh"
+grep -q 'SOURCE_REF="source-v0.1.0-beta.44"' "$PROJECT_ROOT/scripts/install-macos.sh"
+grep -q 'source-v0.1.0-beta.44/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
 grep -q 'codesign --verify --deep --strict' "$PROJECT_ROOT/scripts/install-macos.sh"
 ! grep -q 'sudo' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'CFBundleIconFile' "$PROJECT_ROOT/installer/Info.plist"
@@ -101,6 +117,11 @@ grep -q 'previousSelection' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swif
 grep -q 'relaunchGrokNormallyIfNeeded' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Closing the temporary diagnostic port' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'completion marker before the host restart' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'GROKROUTER_%s_PHASE_%s' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'GROKROUTER_%s_INSTALL_FAILED_%s_%s' "$PROJECT_ROOT/remote/install.sh"
+grep -q -- '--fetch-retries=3' "$PROJECT_ROOT/remote/install.sh"
+grep -q -- '--fetch-timeout=30000' "$PROJECT_ROOT/remote/install.sh"
+[[ -f "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml" ]]
 grep -q 'Emit the restore sentinel before the delayed host restart' "$PROJECT_ROOT/remote/grokbot-router"
 grep -q 'sleep 3; pkill -f' "$PROJECT_ROOT/remote/grokbot-router"
 grep -q 'known-stock-host-repaired' "$PROJECT_ROOT/remote/grokbot-router-watchdog"
@@ -149,12 +170,17 @@ ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_BIN_DIR="$TEST_BIN" \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
+ROUTER_INSTALL_ATTEMPT=SUCCESS44 \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$TEST_RUNTIME" \
   --provider codex \
   --providers codex,openrouter \
   --no-restart \
-  >/dev/null
+  >"$TEMPORARY/install-success.log"
+
+for phase in PREFLIGHT VALIDATE_PAYLOAD PREPARE_RUNTIME INSTALL_DEPENDENCIES ACTIVATE_RUNTIME APPLY_ADAPTER VERIFY_INSTALL COMPLETE; do
+  grep -q "GROKROUTER_SUCCESS44_PHASE_$phase" "$TEMPORARY/install-success.log"
+done
 
 grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
 grep -q 'appendGrokBotRouterHostError' "$TEST_HOST"

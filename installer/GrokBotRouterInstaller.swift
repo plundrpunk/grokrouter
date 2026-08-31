@@ -163,11 +163,16 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     private let doctorButton = NSButton(title: "Run Doctor", target: nil, action: nil)
     private let repairButton = NSButton(title: "Repair Router", target: nil, action: nil)
     private let uninstallButton = NSButton(title: "Restore Stock Grok Bot", target: nil, action: nil)
+    private let retryButton = NSButton(title: "Try installation again", target: nil, action: nil)
+    private let copyDiagnosticsButton = NSButton(title: "Copy safe diagnostics", target: nil, action: nil)
+    private let supportButton = NSButton(title: "Open support issue", target: nil, action: nil)
     private let progress = NSProgressIndicator()
     private let statusLabel = NSTextField(labelWithString: "Ready. Grok Bot will restart during installation.")
     private let logView = NSTextView()
+    private var recoveryRow: NSStackView!
     private var busy = false
     private var diagnosticsLaunchedByInstaller = false
+    private var lastDiagnosticReport = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildWindow()
@@ -179,7 +184,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 790),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 838),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -276,6 +281,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         repairButton.action = #selector(startRepair)
         uninstallButton.target = self
         uninstallButton.action = #selector(startUninstall)
+        retryButton.target = self
+        retryButton.action = #selector(startInstall)
+        copyDiagnosticsButton.target = self
+        copyDiagnosticsButton.action = #selector(copyDiagnostics)
+        supportButton.target = self
+        supportButton.action = #selector(openSupportIssue)
         authButton.title = "Codex sign-in"
         doctorButton.title = "Check health"
         repairButton.title = "Repair"
@@ -285,6 +296,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         utilities.orientation = .horizontal
         utilities.spacing = 8
         utilities.distribution = .fillEqually
+        [retryButton, copyDiagnosticsButton, supportButton].forEach(styleUtilityButton)
+        recoveryRow = NSStackView(views: [retryButton, copyDiagnosticsButton, supportButton])
+        recoveryRow.orientation = .horizontal
+        recoveryRow.spacing = 8
+        recoveryRow.distribution = .fillEqually
+        recoveryRow.isHidden = true
 
         progress.style = .spinning
         progress.controlSize = .small
@@ -317,7 +334,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let utilityLabel = NSTextField(labelWithString: "TOOLS")
         utilityLabel.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
         utilityLabel.textColor = .tertiaryLabelColor
-        let installStack = NSStackView(views: [installSectionHeader, installRow, utilityLabel, utilities])
+        let installStack = NSStackView(views: [installSectionHeader, installRow, utilityLabel, utilities, recoveryRow])
         installStack.orientation = .vertical
         installStack.alignment = .leading
         installStack.spacing = 12
@@ -436,7 +453,17 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         doctorButton.isEnabled = !value
         repairButton.isEnabled = !value
         uninstallButton.isEnabled = !value
+        retryButton.isEnabled = !value
+        copyDiagnosticsButton.isEnabled = !value && !lastDiagnosticReport.isEmpty
+        supportButton.isEnabled = !value
         if !value { providerSelectionChanged() }
+    }
+
+    private func updateStatus(_ status: String) {
+        DispatchQueue.main.async {
+            guard self.busy else { return }
+            self.statusLabel.stringValue = status
+        }
     }
 
     private func appendLog(_ text: String) {
@@ -446,8 +473,86 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func runOperation(_ initialStatus: String, operation: @escaping () async throws -> String) {
+    private func normalizedOCR(_ text: String) -> String {
+        text.uppercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    private func installPhaseDetails() -> [(marker: String, status: String, failure: String)] {
+        [
+            ("PREFLIGHT", "Step 3 of 6 · Checking the Bot computer…", "The Bot computer is missing a required tool or has an unsupported runtime."),
+            ("VALIDATEPAYLOAD", "Step 3 of 6 · Verifying the installer files…", "The installer files did not pass their integrity check."),
+            ("PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."),
+            ("INSTALLDEPENDENCIES", "Step 4 of 6 · Downloading pinned dependencies…", "The Bot computer could not download the pinned dependencies. Check its internet connection, then try again."),
+            ("ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."),
+            ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."),
+            ("VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."),
+            ("COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly.")
+        ]
+    }
+
+    private func redactedDiagnosticExcerpt(_ text: String) -> String {
+        let interestingWords = ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER"]
+        let selected = text
+            .split(whereSeparator: { $0.isNewline })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { line in
+                let upper = line.uppercased()
+                return !line.isEmpty && interestingWords.contains(where: upper.contains)
+            }
+            .suffix(10)
+            .map { String($0.prefix(240)) }
+            .joined(separator: "\n")
+        guard !selected.isEmpty else { return "No safe terminal excerpt was available." }
+        let patterns = [
+            #"sk-or-v1-[A-Za-z0-9_-]+"#,
+            #"sk-[A-Za-z0-9_-]{12,}"#
+        ]
+        return patterns.reduce(selected) { value, pattern in
+            guard let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else {
+                return value
+            }
+            let range = NSRange(value.startIndex..<value.endIndex, in: value)
+            return expression.stringByReplacingMatches(in: value, range: range, withTemplate: "[REDACTED_KEY]")
+        }
+    }
+
+    private func makeDiagnosticReport(failure: String, terminalText: String) -> String {
+        let installerVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        return [
+            "GrokRouter safe diagnostic report",
+            "Installer: \(installerVersion)",
+            "Supported Grok Bot: \(supportedGrokVersion)",
+            "macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)",
+            "Architecture: arm64",
+            "Failure: \(failure)",
+            "Terminal excerpt:",
+            redactedDiagnosticExcerpt(terminalText),
+            "",
+            "This report intentionally excludes credentials, conversations, and Bot files."
+        ].joined(separator: "\n")
+    }
+
+    @objc private func copyDiagnostics() {
+        guard !lastDiagnosticReport.isEmpty else { return }
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(lastDiagnosticReport, forType: .string)
+        statusLabel.stringValue = "Safe diagnostics copied. Paste them into a GitHub issue or support reply."
+    }
+
+    @objc private func openSupportIssue() {
+        guard let url = URL(string: "https://github.com/promptadvisers/grokrouter/issues/new?template=installation-failure.yml") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    private func runOperation(
+        _ initialStatus: String,
+        retryableInstall: Bool = false,
+        operation: @escaping () async throws -> String
+    ) {
         guard !busy else { return }
+        lastDiagnosticReport = ""
+        recoveryRow.isHidden = true
         setBusy(true, status: initialStatus)
         Task {
             do {
@@ -456,13 +561,23 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 await MainActor.run {
                     self.setBusy(false, status: message)
                     self.appendLog("✓ \(message)")
+                    self.recoveryRow.isHidden = true
                 }
             } catch {
                 await self.relaunchGrokNormallyIfNeeded()
                 await MainActor.run {
                     let detail = error.localizedDescription
+                    if self.lastDiagnosticReport.isEmpty {
+                        self.lastDiagnosticReport = self.makeDiagnosticReport(
+                            failure: detail,
+                            terminalText: ""
+                        )
+                    }
                     self.setBusy(false, status: "Stopped: \(detail)")
                     self.appendLog("✗ \(detail)")
+                    self.retryButton.isHidden = !retryableInstall
+                    self.recoveryRow.isHidden = false
+                    self.copyDiagnosticsButton.isEnabled = true
                 }
             }
         }
@@ -487,7 +602,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             return
         }
         openRouterKeyField.stringValue = ""
-        runOperation("Checking Grok Bot…") {
+        runOperation("Step 1 of 6 · Checking Grok Bot…", retryableInstall: true) {
             try await self.install(
                 defaultProvider: defaultProvider,
                 providers: providers,
@@ -710,6 +825,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     }
 
     private func waitForVNC(_ client: CDPClient, pageSession: String) async throws -> AttachedTarget {
+        updateStatus("Step 2 of 6 · Connecting to a Bot computer…")
         appendLog("Waiting for a Bot computer. If Grok Bot does not open it automatically, select any Bot and click Open computer…")
         for index in 0..<360 {
             if let vnc = try await targets(client).first(where: { $0.type == "webview" && $0.url.contains("/vnc.html") }) {
@@ -718,6 +834,10 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             // Reuse an already open computer. Clicking first can replace the
             // valid webview between installer phases and manufacture a retry.
             if index % 20 == 0 { try? await tryOpenComputer(client, pageSession: pageSession) }
+            if index == 20 {
+                updateStatus("Action needed · In Grok Bot, select any Bot and click Open computer.")
+                appendLog("ACTION NEEDED: In Grok Bot, select any Bot and click Open computer. GrokRouter will continue automatically.")
+            }
             try await Task.sleep(nanoseconds: 500_000_000)
         }
         throw InstallerError.message("No Bot computer appeared. Open one in Grok Bot and try again.")
@@ -897,6 +1017,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         try await keyEvent(client, sessionID: vncSession, type: "keyUp", key: "c", code: "KeyC", virtualKey: 67)
         try await keyEvent(client, sessionID: vncSession, type: "keyUp", key: "Control", code: "ControlLeft", virtualKey: 17)
         try await Task.sleep(nanoseconds: 200_000_000)
+        try await typeRemoteCommand("clear", client: client, vncSession: vncSession)
+        try await Task.sleep(nanoseconds: 200_000_000)
     }
 
     private func typeRemoteCommand(_ command: String, client: CDPClient, vncSession: String) async throws {
@@ -995,11 +1117,20 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
 
-    private func waitForSentinel(_ sentinel: String, client: CDPClient, vnc: AttachedTarget, timeoutSeconds: Int) async throws {
-        let expected = sentinel.uppercased().filter { $0.isLetter || $0.isNumber }
+    private func waitForSentinel(
+        _ sentinel: String,
+        client: CDPClient,
+        vnc: AttachedTarget,
+        timeoutSeconds: Int,
+        installAttempt: String? = nil
+    ) async throws {
+        let expected = normalizedOCR(sentinel)
         var activeTargetID = vnc.targetID
         var activeSession = vnc.sessionID
         var reportedReconnect = false
+        var observedPhase = -1
+        var consecutiveGenericErrors = 0
+        var lastTerminalText = ""
         for _ in 0..<(timeoutSeconds / 3) {
             try await Task.sleep(nanoseconds: 3_000_000_000)
             if let current = try? await targets(client).first(where: { $0.type == "webview" && $0.url.contains("/vnc.html") }),
@@ -1015,6 +1146,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             let text: String
             do {
                 text = try await screenshotText(client, sessionID: activeSession)
+                lastTerminalText = text
             } catch {
                 if let vnc = try? await targets(client).first(where: { $0.type == "webview" && $0.url.contains("/vnc.html") }),
                    let replacement = try? await attach(client, targetID: vnc.id) {
@@ -1027,13 +1159,39 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 }
                 continue
             }
-            let normalized = text.uppercased().filter { $0.isLetter || $0.isNumber }
+            let normalized = normalizedOCR(text)
             if normalized.contains(expected) { return }
+            if let installAttempt {
+                let attemptPrefix = "GROKROUTER\(installAttempt)"
+                for (index, phase) in installPhaseDetails().enumerated()
+                    where index > observedPhase && normalized.contains("\(attemptPrefix)PHASE\(phase.marker)") {
+                    observedPhase = index
+                    updateStatus(phase.status)
+                    appendLog(phase.status)
+                }
+                if normalized.contains("\(attemptPrefix)INSTALLFAILED") {
+                    let phase = installPhaseDetails().reversed().first {
+                        normalized.contains("\(attemptPrefix)INSTALLFAILED\($0.marker)")
+                    }
+                    let message = phase?.failure ?? "The Bot computer stopped before installation completed."
+                    lastDiagnosticReport = makeDiagnosticReport(failure: message, terminalText: text)
+                    throw InstallerError.message("\(message) Copy safe diagnostics for the exact non-secret details.")
+                }
+            }
             if normalized.contains("ERROR") && !normalized.contains("NOERROR") {
-                appendLog("The terminal displayed an error. Waiting briefly in case the installer recovered…")
+                consecutiveGenericErrors += 1
+                if consecutiveGenericErrors >= 2 {
+                    let message = "The Bot terminal stopped before it reported completion."
+                    lastDiagnosticReport = makeDiagnosticReport(failure: message, terminalText: text)
+                    throw InstallerError.message("\(message) Copy safe diagnostics, then try again.")
+                }
+            } else {
+                consecutiveGenericErrors = 0
             }
         }
-        throw InstallerError.message("The Bot terminal did not report completion. Run grokbot-router doctor there for the exact diagnostic.")
+        let message = "The Bot terminal did not report completion before the timeout."
+        lastDiagnosticReport = makeDiagnosticReport(failure: message, terminalText: lastTerminalText)
+        throw InstallerError.message("\(message) Copy safe diagnostics, then try again.")
     }
 
     private func archiveURL() throws -> URL {
@@ -1146,6 +1304,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         openRouterKey: String
     ) async throws -> String {
         try validateGrokApp()
+        updateStatus("Step 1 of 6 · Grok Bot \(supportedGrokVersion) is supported.")
         try await relaunchGrokWithDiagnostics()
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
@@ -1157,6 +1316,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             }
         }
         appendLog("Verifying that keyboard input is isolated to the Bot terminal…")
+        updateStatus("Step 3 of 6 · Verifying the Bot terminal…")
         let transportPayload = Data("\nGROKBOT_ROUTER_TRANSPORT_OK\n".utf8).base64EncodedString()
         // Opening the Computer can replace Grok's webview between discovery
         // and the first noVNC action. Run the harmless transport probe through
@@ -1173,6 +1333,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let archive = try Data(contentsOf: archiveURL())
         let encoded = archive.base64EncodedString()
         let digest = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
+        let installAttempt = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).uppercased()
         let installPayload = Data("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n".utf8).base64EncodedString()
         // Short, quote-free commands always return to a usable shell prompt if
         // the VNC target changes mid-transfer. A retry starts from an empty file.
@@ -1196,12 +1357,18 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel) && clear && printf %s \(installPayload) | base64 -d"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; echo GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_$code; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)
         appendLog("Installing pinned dependencies and applying the reversible host adapter…")
-        try await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client: client, vnc: installVNC, timeoutSeconds: 360)
+        try await waitForSentinel(
+            "GROKBOT_ROUTER_INSTALL_OK",
+            client: client,
+            vnc: installVNC,
+            timeoutSeconds: 360,
+            installAttempt: installAttempt
+        )
         appendLog("The Bot computer reported a successful install.")
         appendLog("Registering native slash commands through Grok Bot's workflow service…")
         try await updateNativeWorkflows(client, pageSession: pageSession)

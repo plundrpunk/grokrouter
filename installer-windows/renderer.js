@@ -9,6 +9,10 @@ const elements = {
   status: document.querySelector("#status"),
   spinner: document.querySelector("#spinner"),
   activity: document.querySelector("#activity"),
+  recovery: document.querySelector("#recovery"),
+  retryInstall: document.querySelector("#retryInstall"),
+  copyDiagnostics: document.querySelector("#copyDiagnostics"),
+  openSupport: document.querySelector("#openSupport"),
 };
 
 const buttons = [...document.querySelectorAll("button")];
@@ -50,13 +54,21 @@ function validOpenRouterKey(value) {
 
 async function run(action, payload = {}) {
   if (busy) return;
+  elements.recovery.classList.add("hidden");
   setBusy(true, action === "install" ? "Checking Grok Bot…" : "Connecting to the Bot computer…");
   try {
     const result = await window.grokRouter.run(action, payload);
-    if (!result?.ok) return;
+    if (!result?.ok) {
+      if (busy) setBusy(false, `Stopped: ${result?.error || "The installer request failed."}`);
+      elements.retryInstall.classList.toggle("hidden", action !== "install");
+      elements.recovery.classList.remove("hidden");
+      return;
+    }
   } catch (error) {
     setBusy(false, `Stopped: ${error.message}`);
     appendLog(`✗ ${error.message}`);
+    elements.retryInstall.classList.toggle("hidden", action !== "install");
+    elements.recovery.classList.remove("hidden");
   }
 }
 
@@ -79,6 +91,13 @@ elements.install.addEventListener("click", () => {
   elements.openRouterKey.value = "";
   run("install", payload);
 });
+
+elements.retryInstall.addEventListener("click", () => elements.install.click());
+elements.copyDiagnostics.addEventListener("click", async () => {
+  const copied = await window.grokRouter.copyDiagnostics();
+  if (copied) elements.status.textContent = "Safe diagnostics copied. Paste them into a GitHub issue or support reply.";
+});
+elements.openSupport.addEventListener("click", () => window.grokRouter.openSupport());
 
 document.querySelectorAll("[data-action]").forEach((button) => {
   button.addEventListener("click", () => {

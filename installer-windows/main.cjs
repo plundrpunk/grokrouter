@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, shell } = require("electron");
 const { spawn, execFile } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
@@ -25,6 +25,7 @@ let mainWindow = null;
 let busy = false;
 let diagnosticsLaunched = false;
 let ocrWorkerPromise = null;
+let lastDiagnosticReport = "";
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
@@ -43,6 +44,44 @@ function setStatus(isBusy, message) {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+const INSTALL_PHASES = Object.freeze([
+  ["PREFLIGHT", "Step 3 of 6 · Checking the Bot computer…", "The Bot computer is missing a required tool or has an unsupported runtime."],
+  ["VALIDATEPAYLOAD", "Step 3 of 6 · Verifying the installer files…", "The installer files did not pass their integrity check."],
+  ["PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."],
+  ["INSTALLDEPENDENCIES", "Step 4 of 6 · Downloading pinned dependencies…", "The Bot computer could not download the pinned dependencies. Check its internet connection, then try again."],
+  ["ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."],
+  ["APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."],
+  ["VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."],
+  ["COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly."],
+]);
+
+function redactedDiagnosticExcerpt(text) {
+  const selected = String(text || "").split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER"].some((word) => line.toUpperCase().includes(word)))
+    .slice(-10)
+    .map((line) => line.slice(0, 240))
+    .join("\n");
+  return (selected || "No safe terminal excerpt was available.")
+    .replace(/sk-or-v1-[A-Za-z0-9_-]+/gi, "[REDACTED_KEY]")
+    .replace(/sk-[A-Za-z0-9_-]{12,}/gi, "[REDACTED_KEY]");
+}
+
+function makeDiagnosticReport(failure, terminalText = "") {
+  return [
+    "GrokRouter safe diagnostic report",
+    `Installer: ${app.getVersion()}`,
+    `Supported Grok Bot: ${SUPPORTED_GROK_VERSION}`,
+    `Windows: ${process.getSystemVersion()}`,
+    `Architecture: ${process.arch}`,
+    `Failure: ${failure}`,
+    "Terminal excerpt:",
+    redactedDiagnosticExcerpt(terminalText),
+    "",
+    "This report intentionally excludes credentials, conversations, and Bot files.",
+  ].join("\n");
 }
 
 function requestJSON(url, timeoutMilliseconds = 3_000) {
@@ -297,11 +336,16 @@ async function tryOpenComputer(client, pageSession) {
 }
 
 async function waitForVNC(client, pageSession) {
+  setStatus(true, "Step 2 of 6 · Connecting to a Bot computer…");
   log("Waiting for a Bot computer. If Grok Bot does not open it automatically, select any Bot and click Open computer…");
   for (let index = 0; index < 360; index += 1) {
     const vnc = (await targets(client)).find((item) => item.type === "webview" && item.url.includes("/vnc.html"));
     if (vnc) return { targetID: vnc.id, sessionID: await attach(client, vnc.id) };
     if (index % 20 === 0) await tryOpenComputer(client, pageSession);
+    if (index === 20) {
+      setStatus(true, "Action needed · In Grok Bot, select any Bot and click Open computer.");
+      log("ACTION NEEDED: In Grok Bot, select any Bot and click Open computer. GrokRouter will continue automatically.");
+    }
     await delay(500);
   }
   throw new Error("No Bot computer appeared. Open one in Grok Bot and try again.");
@@ -412,6 +456,8 @@ async function resetRemotePrompt(client, sessionID) {
   await keyEvent(client, sessionID, "keyUp", "c", "KeyC", 67);
   await keyEvent(client, sessionID, "keyUp", "Control", "ControlLeft", 17);
   await delay(200);
+  await typeRemoteCommand("clear", client, sessionID);
+  await delay(200);
 }
 
 async function typeRemoteCommand(command, client, sessionID) {
@@ -446,11 +492,14 @@ async function typeRemoteCommandsResilient(commands, client, pageSession) {
   throw lastError || new Error("The Bot terminal did not acknowledge the install command.");
 }
 
-async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds) {
+async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, installAttempt = null) {
   const expected = normalizeOCR(sentinel);
   let activeTargetID = initialVNC.targetID;
   let activeSession = initialVNC.sessionID;
   let reportedReconnect = false;
+  let observedPhase = -1;
+  let consecutiveGenericErrors = 0;
+  let lastTerminalText = "";
   const deadline = Date.now() + timeoutSeconds * 1_000;
   while (Date.now() < deadline) {
     await delay(3_000);
@@ -460,11 +509,40 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds) {
       activeSession = await attach(client, current.id);
       if (!reportedReconnect) { log("The Bot computer reconnected. Continuing completion verification…"); reportedReconnect = true; }
     }
-    const normalized = normalizeOCR(await screenshotText(client, activeSession).catch(() => ""));
+    const terminalText = await screenshotText(client, activeSession).catch(() => "");
+    lastTerminalText = terminalText || lastTerminalText;
+    const normalized = normalizeOCR(terminalText);
     if (normalized.includes(expected)) return;
-    if (normalized.includes("ERROR") && !normalized.includes("NOERROR")) log("The terminal displayed an error. Waiting briefly in case the installer recovered…");
+    if (installAttempt) {
+      const attemptPrefix = `GROKROUTER${installAttempt}`;
+      INSTALL_PHASES.forEach((phase, index) => {
+        if (index > observedPhase && normalized.includes(`${attemptPrefix}PHASE${phase[0]}`)) {
+          observedPhase = index;
+          setStatus(true, phase[1]);
+          log(phase[1]);
+        }
+      });
+      if (normalized.includes(`${attemptPrefix}INSTALLFAILED`)) {
+        const phase = [...INSTALL_PHASES].reverse().find((candidate) => normalized.includes(`${attemptPrefix}INSTALLFAILED${candidate[0]}`));
+        const message = phase?.[2] || "The Bot computer stopped before installation completed.";
+        lastDiagnosticReport = makeDiagnosticReport(message, terminalText);
+        throw new Error(`${message} Copy safe diagnostics for the exact non-secret details.`);
+      }
+    }
+    if (normalized.includes("ERROR") && !normalized.includes("NOERROR")) {
+      consecutiveGenericErrors += 1;
+      if (consecutiveGenericErrors >= 2) {
+        const message = "The Bot terminal stopped before it reported completion.";
+        lastDiagnosticReport = makeDiagnosticReport(message, terminalText);
+        throw new Error(`${message} Copy safe diagnostics, then try again.`);
+      }
+    } else {
+      consecutiveGenericErrors = 0;
+    }
   }
-  throw new Error("The Bot terminal did not report completion. Run grokbot-router doctor there for the exact diagnostic.");
+  const message = "The Bot terminal did not report completion before the timeout.";
+  lastDiagnosticReport = makeDiagnosticReport(message, lastTerminalText);
+  throw new Error(`${message} Copy safe diagnostics, then try again.`);
 }
 
 function payloadPath() {
@@ -534,6 +612,7 @@ function validatedInstallOptions(raw) {
 
 async function installRouter(executable, rawOptions) {
   const options = validatedInstallOptions(rawOptions);
+  setStatus(true, `Step 1 of 6 · Grok Bot ${SUPPORTED_GROK_VERSION} is supported.`);
   await relaunchWithDiagnostics(executable);
   const client = new CDPClient(await browserWebSocketURL());
   try {
@@ -543,6 +622,7 @@ async function installRouter(executable, rawOptions) {
       else log("No OpenRouter key entered. Keeping any existing OPENROUTER_API_KEY in Grok Bot Secrets.");
     }
     log("Verifying that keyboard input is isolated to the Bot terminal…");
+    setStatus(true, "Step 3 of 6 · Verifying the Bot terminal…");
     const transportPayload = Buffer.from("\nGROKBOT_ROUTER_TRANSPORT_OK\n").toString("base64");
     const transportVNC = await typeRemoteCommandsResilient([`printf %s ${transportPayload} | base64 -d`], client, pageSession);
     log("Connected to the Bot computer without Windows Accessibility permissions.");
@@ -552,6 +632,7 @@ async function installRouter(executable, rawOptions) {
     const archive = fs.readFileSync(payloadPath());
     const encoded = archive.toString("base64");
     const digest = crypto.createHash("sha256").update(archive).digest("hex");
+    const installAttempt = crypto.randomBytes(4).toString("hex").toUpperCase();
     const installPayload = Buffer.from("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n").toString("base64");
     const chunks = [];
     for (let index = 0; index < encoded.length; index += 1_000) chunks.push(encoded.slice(index, index + 1_000));
@@ -563,12 +644,12 @@ async function installRouter(executable, rawOptions) {
       "rm -rf /tmp/grokbot-router-installer/payload",
       "mkdir -p /tmp/grokbot-router-installer/payload",
       "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-      `bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel} && clear && printf %s ${installPayload} | base64 -d`,
+      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; echo GROKROUTER_${installAttempt}_INSTALL_FAILED_UNKNOWN_CODE_$code; fi`,
     );
     log("Transferring a SHA-256-verified payload into the Bot computer…");
     const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);
     log("Installing pinned dependencies and applying the reversible host adapter…");
-    await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client, installVNC, 360);
+    await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client, installVNC, 360, installAttempt);
     log("The Bot computer reported a successful install.");
     log("Registering native slash commands through Grok Bot's workflow service…");
     await updateNativeWorkflows(client, pageSession);
@@ -654,6 +735,7 @@ ipcMain.handle("grokrouter:run", async (event, request) => {
   if (action !== "install" && !Object.hasOwn(REMOTE_ACTIONS, action)) return { ok: false, error: "Unknown installer action." };
   if (busy) return { ok: false, error: "Another installer operation is already running." };
   busy = true;
+  lastDiagnosticReport = "";
   try {
     const message = await runAction(action, request?.payload || {});
     log(`✓ ${message}`);
@@ -661,12 +743,25 @@ ipcMain.handle("grokrouter:run", async (event, request) => {
     return { ok: true };
   } catch (error) {
     const detail = errorMessage(error);
+    if (!lastDiagnosticReport) lastDiagnosticReport = makeDiagnosticReport(detail);
     log(`✗ ${detail}`);
     setStatus(false, `Stopped: ${detail}`);
     return { ok: false, error: detail };
   } finally {
     busy = false;
   }
+});
+
+ipcMain.handle("grokrouter:copy-diagnostics", (event) => {
+  if (!event.senderFrame.url.startsWith("file://") || !lastDiagnosticReport) return false;
+  clipboard.writeText(lastDiagnosticReport);
+  return true;
+});
+
+ipcMain.handle("grokrouter:open-support", async (event) => {
+  if (!event.senderFrame.url.startsWith("file://")) return false;
+  await shell.openExternal("https://github.com/promptadvisers/grokrouter/issues/new?template=installation-failure.yml");
+  return true;
 });
 
 app.whenReady().then(createWindow);

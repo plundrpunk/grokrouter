@@ -1,0 +1,57 @@
+name: Installation problem
+description: Report a GrokRouter setup or repair failure without sharing secrets.
+title: "[Install]: "
+labels:
+  - installation
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Never paste an OpenRouter key, Codex device code, password, conversation, or private Bot file.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: The beginner-tested path is Apple-silicon macOS. Windows remains a source preview.
+      options:
+        - Apple-silicon Mac
+        - Windows x64 preview
+        - Windows Arm64 preview
+        - Unsupported or unknown
+    validations:
+      required: true
+
+  - type: input
+    id: grokrouter_version
+    attributes:
+      label: GrokRouter version
+      placeholder: 0.1.0-beta.44
+    validations:
+      required: true
+
+  - type: textarea
+    id: safe_diagnostics
+    attributes:
+      label: Safe diagnostics
+      description: In GrokRouter, click Copy safe diagnostics and paste the report here.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: visible_result
+    attributes:
+      label: What happened?
+      description: Describe the last visible step and what you expected to happen.
+      placeholder: It stopped while downloading dependencies after I opened the Bot computer.
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: secret_check
+    attributes:
+      label: Privacy check
+      options:
+        - label: I confirmed this report contains no API key, device code, password, conversation, or private Bot file.
+          required: true

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
-ROUTER_VERSION="0.1.0-beta.43"
+ROUTER_VERSION="0.1.0-beta.44"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
@@ -15,6 +15,35 @@ CODEX_MODEL_EXPLICIT=0
 OPENROUTER_MODEL_EXPLICIT=0
 START_WATCHDOG=1
 GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
+INSTALL_ATTEMPT="${ROUTER_INSTALL_ATTEMPT:-LOCAL}"
+INSTALL_PHASE="OPTIONS"
+
+if [[ ! "$INSTALL_ATTEMPT" =~ ^[A-Z0-9]{4,16}$ ]]; then
+  INSTALL_ATTEMPT="LOCAL"
+fi
+
+emit_phase() {
+  INSTALL_PHASE="$1"
+  printf '\nGROKROUTER_%s_PHASE_%s\n' "$INSTALL_ATTEMPT" "$INSTALL_PHASE"
+}
+
+fail_install() {
+  local code="$1"
+  shift
+  trap - ERR
+  printf 'ERROR: %s\n' "$*" >&2
+  printf 'GROKROUTER_%s_INSTALL_FAILED_%s_%s\n' "$INSTALL_ATTEMPT" "$INSTALL_PHASE" "$code" >&2
+  exit 1
+}
+
+report_unhandled_error() {
+  local status=$?
+  trap - ERR
+  printf '\nGROKROUTER_%s_INSTALL_FAILED_%s_COMMAND_%s\n' "$INSTALL_ATTEMPT" "$INSTALL_PHASE" "$status" >&2
+  exit "$status"
+}
+
+trap report_unhandled_error ERR
 
 usage() {
   printf '%s\n' \
@@ -67,37 +96,32 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      printf 'ERROR: unknown option %s\n' "$1" >&2
       usage >&2
-      exit 2
+      fail_install "UNKNOWN_OPTION" "unknown option $1"
       ;;
   esac
 done
 
 if [[ "$DEFAULT_PROVIDER" != "codex" && "$DEFAULT_PROVIDER" != "openrouter" ]]; then
-  printf 'ERROR: --provider must be codex or openrouter\n' >&2
-  exit 2
+  fail_install "INVALID_PROVIDER" "--provider must be codex or openrouter"
 fi
 if [[ ! "$OPENROUTER_MODEL" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+$ ]]; then
-  printf 'ERROR: --openrouter-model must use vendor/model format\n' >&2
-  exit 2
+  fail_install "INVALID_OPENROUTER_MODEL" "--openrouter-model must use vendor/model format"
 fi
 if [[ "$ENABLED_PROVIDERS" != "codex" && "$ENABLED_PROVIDERS" != "openrouter" && "$ENABLED_PROVIDERS" != "codex,openrouter" && "$ENABLED_PROVIDERS" != "openrouter,codex" ]]; then
-  printf 'ERROR: --providers must be codex, openrouter, or codex,openrouter\n' >&2
-  exit 2
+  fail_install "INVALID_PROVIDERS" "--providers must be codex, openrouter, or codex,openrouter"
 fi
 
+emit_phase "PREFLIGHT"
 for command_name in node npm python3 sha256sum; do
   if ! command -v "$command_name" >/dev/null 2>&1; then
-    printf 'ERROR: required command is missing: %s\n' "$command_name" >&2
-    exit 1
+    fail_install "MISSING_COMMAND" "required command is missing: $command_name"
   fi
 done
 
 NODE_MAJOR="$(node -p 'Number(process.versions.node.split(".")[0])')"
 if (( NODE_MAJOR < 18 )); then
-  printf 'ERROR: Node.js 18 or newer is required; found %s\n' "$(node -v)" >&2
-  exit 1
+  fail_install "NODE_TOO_OLD" "Node.js 18 or newer is required; found $(node -v)"
 fi
 
 mkdir -p "$INSTALL_PARENT"
@@ -110,10 +134,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+emit_phase "VALIDATE_PAYLOAD"
 printf '[1/6] Validating payload\n'
 if [[ ! -f "$PAYLOAD_ROOT/SHA256SUMS" ]]; then
-  printf 'ERROR: payload integrity manifest is missing\n' >&2
-  exit 1
+  fail_install "MISSING_MANIFEST" "payload integrity manifest is missing"
 fi
 (cd "$PAYLOAD_ROOT" && sha256sum -c SHA256SUMS >/dev/null)
 for required in \
@@ -126,17 +150,16 @@ for required in \
   "$PAYLOAD_ROOT/remote/grokbot-router" \
   "$PAYLOAD_ROOT/remote/grokbot-router-watchdog"; do
   if [[ ! -f "$required" ]]; then
-    printf 'ERROR: payload is incomplete: %s\n' "$required" >&2
-    exit 1
+    fail_install "INCOMPLETE_PAYLOAD" "payload is incomplete: $required"
   fi
 done
 for skill_name in provider models model reasoning router doctor; do
   if [[ ! -f "$PAYLOAD_ROOT/skills/$skill_name/SKILL.md" ]]; then
-    printf 'ERROR: payload is missing the /%s native command definition\n' "$skill_name" >&2
-    exit 1
+    fail_install "MISSING_COMMAND_DEFINITION" "payload is missing the /$skill_name native command definition"
   fi
 done
 
+emit_phase "PREPARE_RUNTIME"
 printf '[2/6] Preparing isolated runtime\n'
 cp "$PAYLOAD_ROOT/runtime/run-provider.mjs" "$STAGE_ROOT/run-provider.mjs"
 cp "$PAYLOAD_ROOT/runtime/package.json" "$STAGE_ROOT/package.json"
@@ -219,9 +242,19 @@ ENABLED_PROVIDERS="$(python3 -c 'import json,sys; print(",".join(json.load(open(
 CODEX_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codexModel"])' "$STAGE_ROOT/provider.json")"
 OPENROUTER_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["openRouterModel"])' "$STAGE_ROOT/provider.json")"
 
+emit_phase "INSTALL_DEPENDENCIES"
 printf '[3/6] Installing pinned Codex SDK dependencies\n'
-(cd "$STAGE_ROOT" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
+(cd "$STAGE_ROOT" && npm ci \
+  --omit=dev \
+  --ignore-scripts \
+  --no-audit \
+  --no-fund \
+  --fetch-retries=3 \
+  --fetch-retry-mintimeout=1000 \
+  --fetch-retry-maxtimeout=10000 \
+  --fetch-timeout=30000)
 
+emit_phase "ACTIVATE_RUNTIME"
 printf '[4/6] Activating runtime atomically\n'
 if [[ -e "$INSTALL_ROOT" ]]; then
   PREVIOUS_ROOT="${INSTALL_ROOT}.previous.$(date +%s)"
@@ -239,6 +272,7 @@ rollback_runtime() {
   fi
 }
 
+emit_phase "APPLY_ADAPTER"
 printf '[5/6] Applying version-gated host adapter\n'
 PATCH_HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
 PATCH_BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
@@ -254,8 +288,7 @@ if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
 fi
 if ! python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"; then
   rollback_runtime
-  printf 'ERROR: host adapter failed; the previous runtime was restored\n' >&2
-  exit 1
+  fail_install "ADAPTER_REJECTED" "host adapter failed; the previous runtime was restored"
 fi
 
 # Beta.40 incorrectly treated loose ~/.grok/skills links as native slash-menu
@@ -284,6 +317,7 @@ if [[ "$ROUTER_BIN_DIR" == "/home/box/.local/bin" ]]; then
   fi
 fi
 
+emit_phase "VERIFY_INSTALL"
 printf '[6/6] Final verification\n'
 node --check "$INSTALL_ROOT/run-provider.mjs"
 python3 "$INSTALL_ROOT/patch/router_patch.py" --doctor "${PATCH_ARGS[@]}"
@@ -330,6 +364,7 @@ for stale in backups[2:]:
         shutil.rmtree(stale)
 PY
 
+emit_phase "COMPLETE"
 printf '\nGROKBOT_ROUTER_INSTALL_OK\n'
 printf 'Version: %s\n' "$ROUTER_VERSION"
 printf 'Default provider: %s\n' "$DEFAULT_PROVIDER"
