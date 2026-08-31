@@ -97,8 +97,8 @@ class RouterPatchTests(unittest.TestCase):
         self.assertNotIn("new SandRunAbortError", self.host.read_text())
         self.assertIn('for (const name of ["SendToUser", "SendMessage", "SendUser"])', self.host.read_text())
         self.assertIn('return "SendToUser";', self.host.read_text())
-        self.assertIn('{ botId: boxId }', self.host.read_text())
-        self.assertEqual(self.host.read_text().count('{ botId: boxId }'), 1)
+        self.assertIn('{ botId: typeof boxId === "string"', self.host.read_text())
+        self.assertEqual(self.host.read_text().count('{ botId: typeof boxId === "string"'), 1)
         self.assertEqual(self.backup.read_text(), STOCK_SOURCE)
         self.assertTrue(router_patch.doctor(self.host, self.backup, self.manifest)["ok"])
 

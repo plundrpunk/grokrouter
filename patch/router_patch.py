@@ -20,8 +20,8 @@ import time
 from typing import Any
 
 
-MARKER = "GROKBOT_MODEL_ROUTER_V38"
-LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37))")
+MARKER = "GROKBOT_MODEL_ROUTER_V39"
+LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38))")
 DEFAULT_HOST = Path("/home/box/sand-host/host-main.cjs")
 DEFAULT_BACKUP = Path("/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock")
 LEGACY_BACKUPS = (
@@ -32,7 +32,7 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 
 
 EXECUTOR_CODE = r'''
-// GROKBOT_MODEL_ROUTER_V38: version-gated Codex SDK and OpenRouter executor.
+// GROKBOT_MODEL_ROUTER_V39: version-gated Codex SDK and OpenRouter executor.
 function loadGrokBotRouterConfig() {
   const configPath = "/home/box/sand-data/grokbot-router/provider.json";
   try {
@@ -256,7 +256,7 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 
 
 SESSION_CODE = r'''
-      // GROKBOT_MODEL_ROUTER_V38: route enabled sessions through the provider adapter.
+      // GROKBOT_MODEL_ROUTER_V39: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
@@ -344,7 +344,7 @@ def patch_text(source: str) -> str:
     source, identity_count = identity_pattern.subn(
         lambda match: (
             f"{match.group(1)}"
-            "          ...(typeof boxId === \"string\" && boxId ? { botId: boxId } : {}),\n"
+            "          ...(boxId != null ? { botId: typeof boxId === \"string\" ? boxId : JSON.stringify(boxId) || String(boxId) } : {}),\n"
             f"{match.group(2)}"
         ),
         source,

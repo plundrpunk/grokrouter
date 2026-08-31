@@ -197,15 +197,28 @@ function objectKeyPaths(value, depth = 0, prefix = "", results = [], seen = new 
 function controlProbe(messages) {
   const visible = latestUserText(messages);
   const match = visible.match(/\/(providers?|models?|reasoning|router|doctor)(?:\s|$)/i);
-  if (!match) return { visibleLength: visible.length, command: "", prefixShape: "" };
-  const prefix = visible.slice(0, match.index);
+  const bare = visible.match(/\b(providers?|models?|reasoning|router|doctor)\b/i);
+  const prefix = match ? visible.slice(0, match.index) : visible;
+  const latestUser = [...(Array.isArray(messages) ? messages : [])].reverse()
+    .find((message) => ["user", "human"].includes(messageRole(message)));
+  const leafProbe = stringLeaves(latestUser?.content ?? latestUser)
+    .filter((leaf) => /\b(providers?|models?|reasoning|router|doctor)\b/i.test(leaf))
+    .slice(0, 16)
+    .map((leaf) => ({
+      length: leaf.length,
+      hasAsciiSlash: leaf.includes("/"),
+      commands: [...new Set([...leaf.matchAll(/\b(providers?|models?|reasoning|router|doctor)\b/ig)]
+        .map((candidate) => candidate[1].toLowerCase()))],
+    }));
   return {
     visibleLength: visible.length,
-    command: `/${match[1].toLowerCase()}`,
+    command: match ? `/${match[1].toLowerCase()}` : "",
+    bareCommand: bare ? bare[1].toLowerCase() : "",
     prefixShape: prefix
       .replace(/[\p{L}\p{N}\p{M}]+/gu, "A")
       .replace(/\s+/g, " ")
-      .slice(0, 160),
+      .slice(0, 320),
+    leafProbe,
   };
 }
 
