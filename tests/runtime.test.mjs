@@ -41,6 +41,18 @@ test("extracts router controls only from exact or pure group-addressed input", (
     "Please ask @Research Bot to run /provider",
   );
   assert.equal(addressedRouterControlText("@Research Bot, /provider"), "@Research Bot, /provider");
+  assert.equal(
+    addressedRouterControlText('<mention data-agent-id="bot-123">@Research Bot</mention> /provider'),
+    "/provider",
+  );
+  assert.equal(
+    addressedRouterControlText("[mention=bot-123]@Research Bot[/mention] /doctor"),
+    "/doctor",
+  );
+  assert.equal(
+    addressedRouterControlText("Please <mention>@Research Bot</mention> /provider"),
+    "Please <mention>@Research Bot</mention> /provider",
+  );
 });
 
 test("extracts deterministic controls from Grok's registered workflow envelope only", () => {

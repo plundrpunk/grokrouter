@@ -130,7 +130,16 @@ export function addressedRouterControlText(input) {
   if (ROUTER_CONTROL_PREFIX.test(trimmed)) return trimmed;
   const slashIndex = trimmed.search(/\/(?:providers?|models?|reasoning|router|doctor)(?:\s|$)/i);
   if (slashIndex <= 0) return trimmed;
-  const address = trimmed.slice(0, slashIndex).trim();
+  const rawAddress = trimmed.slice(0, slashIndex).trim();
+  // Grok's direct composer renders a mention as plain @text, while channels
+  // can preserve the same mention inside lightweight HTML/markdown wrappers.
+  // Strip wrappers, never prose, before applying the pure-address gate.
+  const address = rawAddress
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\[(?:\/?)(?:mention|bot)[^\]]*\]/gi, " ")
+    .replace(/\uFFFC/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
   // Grok group messages can retain a leading @Bot mention in the visible
   // prompt. Accept only a pure address prefix. Natural-language requests such
   // as "please run /provider" must still go through normal model inference.
@@ -140,6 +149,33 @@ export function addressedRouterControlText(input) {
     return trimmed;
   }
   return trimmed.slice(slashIndex).trim();
+}
+
+function objectKeyPaths(value, depth = 0, prefix = "", results = [], seen = new Set()) {
+  if (depth > 4 || value == null || typeof value !== "object" || seen.has(value)) return results;
+  seen.add(value);
+  for (const [key, child] of Object.entries(value)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    results.push(path.slice(0, 160));
+    if (child && typeof child === "object") objectKeyPaths(child, depth + 1, path, results, seen);
+    if (results.length >= 64) break;
+  }
+  return [...new Set(results)].sort();
+}
+
+function controlProbe(messages) {
+  const visible = latestUserText(messages);
+  const match = visible.match(/\/(providers?|models?|reasoning|router|doctor)(?:\s|$)/i);
+  if (!match) return { visibleLength: visible.length, command: "", prefixShape: "" };
+  const prefix = visible.slice(0, match.index);
+  return {
+    visibleLength: visible.length,
+    command: `/${match[1].toLowerCase()}`,
+    prefixShape: prefix
+      .replace(/[\p{L}\p{N}\p{M}]+/gu, "A")
+      .replace(/\s+/g, " ")
+      .slice(0, 160),
+  };
 }
 
 const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_COMMAND:\s*(\/(?:providers?|models?|reasoning|router|doctor))(?:\s|$)/ig;
@@ -1875,6 +1911,16 @@ export async function runTurn(input, dependencies = {}) {
     provider: state.provider,
     model: state.model,
     messageCount: messages.length,
+    sessionOptionKeys: objectKeyPaths(sessionOptions),
+    controlProbe: controlProbe(messages),
+    messageTextFingerprints: messages.slice(-8).map((message) => {
+      const text = collectText(message?.content ?? message);
+      return {
+        role: messageRole(message),
+        length: text.length,
+        sha256: createHash("sha256").update(text).digest("hex").slice(0, 16),
+      };
+    }),
     toolCount: effectiveTools.length,
     toolNames: effectiveTools.map((tool) => tool.name),
     messageShapes: messages.slice(-16).map(auditMessageShape),
