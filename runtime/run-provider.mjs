@@ -210,6 +210,18 @@ function controlProbe(messages) {
       commands: [...new Set([...leaf.matchAll(/\b(providers?|models?|reasoning|router|doctor)\b/ig)]
         .map((candidate) => candidate[1].toLowerCase()))],
     }));
+  const messageControlLeaves = (Array.isArray(messages) ? messages : []).slice(-8).flatMap((message) =>
+    stringLeaves(message?.content ?? message).flatMap((leaf) => {
+      const commands = [...leaf.matchAll(/\/(providers?|models?|reasoning|router|doctor)(?:\s|$)/ig)];
+      return commands.slice(-8).map((candidate) => ({
+        role: messageRole(message),
+        length: leaf.length,
+        command: `/${candidate[1].toLowerCase()}`,
+        prefixShape: leaf.slice(Math.max(0, Number(candidate.index || 0) - 240), Number(candidate.index || 0))
+          .replace(/[\p{L}\p{N}\p{M}]+/gu, "A")
+          .replace(/\s+/g, " "),
+      }));
+    })).slice(0, 64);
   return {
     visibleLength: visible.length,
     command: match ? `/${match[1].toLowerCase()}` : "",
@@ -219,6 +231,7 @@ function controlProbe(messages) {
       .replace(/\s+/g, " ")
       .slice(0, 320),
     leafProbe,
+    messageControlLeaves,
   };
 }
 
@@ -1906,6 +1919,7 @@ export async function runTurn(input, dependencies = {}) {
     }
   }
   const controlText = nativeWorkflowControlText(messages)
+    || addressedRouterControlText(sessionOptions.grokBotRouterControlText)
     || structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation

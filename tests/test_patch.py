@@ -30,6 +30,7 @@ class Host {
 }
 function runInference(host) {
   const boxId = host.resolveBoxId();
+  const activeRunTranscriptText = "@Research Bot /provider";
   const mainSessionOptions = {
           modelId: host.subagentModelId,
           isSubagent: host.isSubagentRunner,
@@ -99,6 +100,7 @@ class RouterPatchTests(unittest.TestCase):
         self.assertIn('return "SendToUser";', self.host.read_text())
         self.assertIn('{ botId: typeof boxId === "string"', self.host.read_text())
         self.assertEqual(self.host.read_text().count('{ botId: typeof boxId === "string"'), 1)
+        self.assertIn('grokBotRouterControlText: activeRunTranscriptText', self.host.read_text())
         self.assertEqual(self.backup.read_text(), STOCK_SOURCE)
         self.assertTrue(router_patch.doctor(self.host, self.backup, self.manifest)["ok"])
 

@@ -1082,6 +1082,32 @@ test("a group-addressed control changes only the addressed Bot's state", async (
   }
 });
 
+test("a raw host transcript control survives Grok's sanitized channel envelope", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-raw-channel-control-"));
+  const config = {
+    provider: "openrouter",
+    providers: ["codex", "openrouter"],
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  const neverInfer = async () => { throw new Error("raw control leaked to model inference"); };
+  try {
+    const result = await runTurn({
+      config,
+      messages: [user("Channel orchestration envelope with the original slash command removed")],
+      sessionOptions: {
+        botId: "social-guru",
+        channelId: "router-council",
+        grokBotRouterControlText: "@Social Guru /provider",
+      },
+    }, { fetchImpl: neverInfer });
+    assert.match(result.text, /OpenRouter is active/);
+    assert.equal(result.control, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("group identity changes do not discard a previously combined-ID router state", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokbot-router-group-migration-"));
   const stateDirectory = join(root, "states");
