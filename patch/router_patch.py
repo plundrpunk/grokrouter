@@ -20,8 +20,8 @@ import time
 from typing import Any
 
 
-MARKER = "GROKBOT_MODEL_ROUTER_V43"
-LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42))")
+MARKER = "GROKBOT_MODEL_ROUTER_V44"
+LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40|41|42|43))")
 DEFAULT_HOST = Path("/home/box/sand-host/host-main.cjs")
 DEFAULT_BACKUP = Path("/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock")
 LEGACY_BACKUPS = (
@@ -32,7 +32,19 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 
 
 EXECUTOR_CODE = r'''
-// GROKBOT_MODEL_ROUTER_V43: version-gated Codex SDK and OpenRouter executor.
+// GROKBOT_MODEL_ROUTER_V44: version-gated Codex SDK and OpenRouter executor.
+function grokBotRouterRecentUserCandidate(options) {
+  const messages = Array.isArray(options?.recentUserMessages) ? options.recentUserMessages : [];
+  const message = messages.at(-1);
+  if (!message || typeof message.text !== "string" || !message.text.trim()) return void 0;
+  const rawId = message.id;
+  let id = "";
+  if (typeof rawId === "string") id = rawId;
+  else if (rawId != null) {
+    try { id = JSON.stringify(rawId) || String(rawId); } catch { id = String(rawId); }
+  }
+  return { id: id.slice(0, 512), text: message.text.slice(0, 8192) };
+}
 function loadGrokBotRouterConfig() {
   const configPath = "/home/box/sand-data/grokbot-router/provider.json";
   try {
@@ -256,7 +268,7 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 
 
 SESSION_CODE = r'''
-      // GROKBOT_MODEL_ROUTER_V43: route enabled sessions through the provider adapter.
+      // GROKBOT_MODEL_ROUTER_V44: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
@@ -346,6 +358,7 @@ def patch_text(source: str) -> str:
             f"{match.group(1)}"
             "          ...(boxId != null ? { botId: typeof boxId === \"string\" ? boxId : JSON.stringify(boxId) || String(boxId) } : {}),\n"
             "          ...(typeof rawTranscriptText === \"string\" && rawTranscriptText ? { grokBotRouterControlText: rawTranscriptText } : {}),\n"
+            "          ...((candidate) => candidate ? { grokBotRouterControlCandidate: candidate } : {})(grokBotRouterRecentUserCandidate(options2)),\n"
             f"{match.group(2)}"
         ),
         source,

@@ -1650,24 +1650,51 @@ function channelControlLatchPath(config) {
   return config.channelControlLatchPath || join(runtimeDirectory, "channel-control-latch.json");
 }
 
-async function rememberChannelControl(config) {
+async function channelControlLatch(config) {
+  try {
+    return JSON.parse(await readFile(channelControlLatchPath(config), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+async function rememberChannelControl(config, fingerprint = "") {
   try {
     const pathname = channelControlLatchPath(config);
+    const previous = await channelControlLatch(config);
+    const now = Date.now();
+    const handled = Object.fromEntries(Object.entries(previous?.handled || {})
+      .filter(([, completedAt]) => now - Number(completedAt) < CHANNEL_CONTROL_LATCH_TTL_MS));
+    if (fingerprint) handled[fingerprint] = now;
     await mkdir(dirname(pathname), { recursive: true });
-    await writeFile(pathname, JSON.stringify({ completedAt: Date.now() }), { mode: 0o600 });
+    await writeFile(pathname, JSON.stringify({ completedAt: now, handled }), { mode: 0o600 });
   } catch {
     // A receipt latch improves channel hygiene but must never break a control.
   }
 }
 
 async function hasRecentChannelControl(config) {
-  try {
-    const value = JSON.parse(await readFile(channelControlLatchPath(config), "utf8"));
-    const completedAt = Number(value?.completedAt || 0);
-    return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
-  } catch {
-    return false;
-  }
+  const value = await channelControlLatch(config);
+  const completedAt = Number(value?.completedAt || 0);
+  return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
+}
+
+async function hasHandledChannelControl(config, fingerprint) {
+  if (!fingerprint) return false;
+  const value = await channelControlLatch(config);
+  const completedAt = Number(value?.handled?.[fingerprint] || 0);
+  return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
+}
+
+function hostRouterControlCandidate(sessionOptions) {
+  const candidate = sessionOptions?.grokBotRouterControlCandidate;
+  const addressed = addressedRouterControlText(candidate?.text);
+  if (!ROUTER_CONTROL_PREFIX.test(addressed)) return null;
+  const id = typeof candidate.id === "string" ? candidate.id : "";
+  return {
+    text: addressed,
+    fingerprint: createHash("sha256").update(`${id}\0${candidate.text}`).digest("hex"),
+  };
 }
 
 function isChannelControlFollowOn(sessionOptions) {
@@ -1951,14 +1978,21 @@ export async function runTurn(input, dependencies = {}) {
       return suppressed("automation-continuation-already-claimed-or-processed");
     }
   }
+  const hostControl = hostRouterControlCandidate(sessionOptions);
+  if (!automationContinuation
+      && hostControl
+      && await hasHandledChannelControl(config, hostControl.fingerprint)) {
+    return suppressed("channel-control-already-handled");
+  }
   const controlText = nativeWorkflowControlText(messages)
+    || hostControl?.text
     || structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation
     ? null
     : await controlResult(config, key, state, controlText);
   if (control) {
-    await rememberChannelControl(config);
+    await rememberChannelControl(config, hostControl?.fingerprint);
     await appendAudit(config, {
       event: "control_turn",
       sessionId: state.sessionId,
