@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -10,6 +11,7 @@ import {
   automationCompletionText,
   automationContinuationSignature,
   codexTranscriptMessages,
+  conversationIdentity,
   extractUserQuery,
   hasDeliveryAfterLatestQuery,
   latestUserText,
@@ -908,6 +910,79 @@ test("per-Bot state is isolated and atomically persisted", async () => {
     const files = (await readdir(join(root, "states"))).filter((name) => name.endsWith(".json"));
     assert.equal(files.length, 2);
     for (const file of files) JSON.parse(await readFile(join(root, "states", file), "utf8"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("group conversations keep router state attached to each Bot, not the channel roster", () => {
+  const messages = [user("hello")];
+  const direct = conversationIdentity(messages, {
+    bot_id: "bot-alpha",
+    conversationId: "direct-chat-alpha",
+  });
+  const group = conversationIdentity(messages, {
+    bot_id: "bot-alpha",
+    channelId: "group-falcon",
+    roster: [{ agentId: "bot-alpha" }, { agentId: "bot-beta" }],
+  });
+  const changedRoster = conversationIdentity(messages, {
+    bot_id: "bot-alpha",
+    channelId: "group-falcon",
+    roster: [{ agentId: "bot-beta" }, { agentId: "bot-alpha" }, { agentId: "bot-gamma" }],
+  });
+  const otherBot = conversationIdentity(messages, {
+    bot_id: "bot-beta",
+    channelId: "group-falcon",
+  });
+
+  assert.equal(group.key, direct.key);
+  assert.equal(changedRoster.key, direct.key);
+  assert.notEqual(otherBot.key, direct.key);
+  assert.equal(group.source, "bot");
+  assert.deepEqual(group.fields, ["botid"]);
+});
+
+test("group identity changes do not discard a previously combined-ID router state", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-group-migration-"));
+  const stateDirectory = join(root, "states");
+  const legacySeed = ["botid:bot-migrate", "conversationid:group-one"].sort().join("|");
+  const legacyKey = createHash("sha256").update(legacySeed).digest("hex");
+  const config = {
+    provider: "codex",
+    providers: ["codex", "openrouter"],
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  try {
+    await mkdir(stateDirectory, { recursive: true });
+    await writeFile(join(stateDirectory, `${legacyKey}.json`), JSON.stringify({
+      conversationKey: legacyKey,
+      sessionId: legacyKey.slice(0, 24),
+      provider: "openrouter",
+      model: "openai/gpt-5.6-luna",
+      reasoning: "high",
+      threadId: "legacy-thread",
+      threadEpoch: 3,
+      tools: [],
+    }));
+
+    const status = await runTurn({
+      config,
+      messages: [user("/provider")],
+      sessionOptions: { botId: "bot-migrate", conversationId: "group-one" },
+    });
+    assert.match(status.text, /OpenRouter is active/);
+    assert.match(status.text, /openai\/gpt-5\.6-luna/);
+
+    const identity = conversationIdentity([user("/provider")], {
+      botId: "bot-migrate",
+      conversationId: "group-one",
+    });
+    const migrated = JSON.parse(await readFile(join(stateDirectory, `${identity.key}.json`), "utf8"));
+    assert.equal(migrated.provider, "openrouter");
+    assert.equal(migrated.threadId, "legacy-thread");
+    assert.equal(migrated.migratedFromConversationKey, legacyKey);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

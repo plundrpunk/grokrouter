@@ -43,7 +43,7 @@ If the app version, host hash, source anchors, payload checksum, Terminal focus 
 5. The provider returns text.
 6. The runtime hands that text to Grok's normal delivery mechanism, so it appears once in the original conversation.
 
-The original beta.32 failure came from treating a changing request ID as part of the Bot's identity. That made a model switch look successful but sent the next message to a new default state file. Stable Bot, chat, thread, lineage and root identifiers now take priority, and the exact beta.38 build proved the selected Luna model persisted into the following normal turn.
+The original beta.32 failure came from treating a changing request ID as part of the Bot's identity. That made a model switch look successful but sent the next message to a new default state file. Stable IDs now take priority, with a real Bot ID winning over the channel or conversation around it. That lets a Bot retain its own model when it joins a group, and changing the group's membership does not change the Bot's router state. Existing combined-ID state is migrated on first use.
 
 ### A router command
 

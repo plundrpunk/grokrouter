@@ -1324,12 +1324,93 @@ async function saveThreadId(config, key, provider, model, threadId, threadEpoch)
   });
 }
 
-function conversationKey(messages, sessionOptions) {
+const SESSION_IDENTITY_PRIORITY = [
+  ["botid"],
+  ["agentid"],
+  [
+    "conversationid", "channelid", "roomid", "bcid", "chatid", "threadid",
+    "lineageid", "rootid", "rootrequestid",
+  ],
+];
+
+function normalizedIdentityKey(key) {
+  return key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+}
+
+function sessionIdentityCandidates(sessionOptions, { includeArrays = false } = {}) {
+  const candidates = new Map();
+  const accepted = new Set(SESSION_IDENTITY_PRIORITY.flat());
+  const visit = (value, depth = 0) => {
+    if (depth > 4 || value == null || typeof value !== "object") return;
+    if (Array.isArray(value) && !includeArrays) return;
+    for (const [key, child] of Object.entries(value)) {
+      const normalizedKey = normalizedIdentityKey(key);
+      if (accepted.has(normalizedKey)
+        && (typeof child === "string" || typeof child === "number")) {
+        const values = candidates.get(normalizedKey) || [];
+        values.push(String(child));
+        candidates.set(normalizedKey, values);
+      } else if (child && typeof child === "object") {
+        visit(child, depth + 1);
+      }
+    }
+  };
+  visit(sessionOptions);
+  return candidates;
+}
+
+function firstRequestIdentity(messages) {
+  return messages
+    .flatMap((message) => [
+      message?.providerOptions?.cursor?.requestId,
+      message?.message?.providerOptions?.cursor?.requestId,
+      message?.data?.providerOptions?.cursor?.requestId,
+    ])
+    .find((value) => typeof value === "string" && value.trim());
+}
+
+function firstUserIdentity(messages) {
+  return messages.map((message) => {
+    const role = messageRole(message);
+    return role === "user" || role === "human" ? extractUserQuery(collectText(message)) : "";
+  }).find(Boolean);
+}
+
+export function conversationIdentity(messages, sessionOptions) {
+  const candidates = sessionIdentityCandidates(sessionOptions);
+  const selectedFields = SESSION_IDENTITY_PRIORITY
+    .find((fields) => fields.some((field) => (candidates.get(field) || []).length > 0));
+  let stableIds = [];
+  if (selectedFields) {
+    stableIds = selectedFields.flatMap((field) => (candidates.get(field) || [])
+      .map((value) => `${field}:${value}`));
+  }
+  const firstRequestId = firstRequestIdentity(messages);
+  // A request ID is turn-scoped in the live Grok 0.30.0 host. It is only a
+  // last-resort identity when the session exposes no Bot or conversation ID.
+  if (firstRequestId && stableIds.length === 0) stableIds.push(`first-request:${firstRequestId}`);
+  const firstUser = firstUserIdentity(messages);
+  const uniqueIds = [...new Set(stableIds)].sort();
+  const seed = uniqueIds.length
+    ? uniqueIds.join("|")
+    : `first-user:${firstUser || collectText(messages[0]) || "empty"}`;
+  return {
+    key: createHash("sha256").update(seed).digest("hex"),
+    source: selectedFields
+      ? (selectedFields[0] === "botid" ? "bot" : selectedFields[0] === "agentid" ? "agent" : "conversation")
+      : firstRequestId ? "request-fallback" : "content-fallback",
+    fields: selectedFields
+      ? selectedFields.filter((field) => (candidates.get(field) || []).length > 0)
+      : [],
+  };
+}
+
+function legacyConversationKey(messages, sessionOptions) {
   const stableIds = [];
   const visit = (value, depth = 0) => {
     if (depth > 4 || value == null || typeof value !== "object") return;
     for (const [key, child] of Object.entries(value)) {
-      const normalizedKey = key.replace(/[^A-Za-z0-9]/g, "").toLowerCase();
+      const normalizedKey = normalizedIdentityKey(key);
       if ([
         "agentid", "botid", "conversationid", "channelid", "roomid", "bcid",
         "chatid", "threadid", "lineageid", "rootid", "rootrequestid",
@@ -1342,21 +1423,12 @@ function conversationKey(messages, sessionOptions) {
     }
   };
   visit(sessionOptions);
-  const firstRequestId = messages
-    .flatMap((message) => [
-      message?.providerOptions?.cursor?.requestId,
-      message?.message?.providerOptions?.cursor?.requestId,
-      message?.data?.providerOptions?.cursor?.requestId,
-    ])
-    .find((value) => typeof value === "string" && value.trim());
+  const firstRequestId = firstRequestIdentity(messages);
   // A request ID is turn-scoped in the live Grok 0.30.0 host. Combining it
   // with an already stable Bot/conversation identifier silently forks state on
   // every message: `/provider` can report a switch that the next prompt loses.
   if (firstRequestId && stableIds.length === 0) stableIds.push(`first-request:${firstRequestId}`);
-  const firstUser = messages.map((message) => {
-    const role = messageRole(message);
-    return role === "user" || role === "human" ? extractUserQuery(collectText(message)) : "";
-  }).find(Boolean);
+  const firstUser = firstUserIdentity(messages);
   const seed = stableIds.length
     ? [...new Set(stableIds)].sort().join("|")
     : `first-user:${firstUser || collectText(messages[0]) || "empty"}`;
@@ -1364,10 +1436,25 @@ function conversationKey(messages, sessionOptions) {
 }
 
 async function stateForTurn(config, messages, sessionOptions) {
-  const key = await linkedConversationKey(config, messages)
-    ?? conversationKey(messages, sessionOptions);
+  const linkedKey = await linkedConversationKey(config, messages);
+  const identity = conversationIdentity(messages, sessionOptions);
+  const key = linkedKey ?? identity.key;
   const allowed = Array.isArray(config.providers) && config.providers.length ? config.providers : ["codex"];
   let state = await readState(config, key);
+  if (!state && !linkedKey) {
+    const legacyKey = legacyConversationKey(messages, sessionOptions);
+    if (legacyKey !== key) {
+      const legacyState = await readState(config, legacyKey);
+      if (legacyState) {
+        const migrated = {
+          ...legacyState,
+          conversationKey: key,
+          migratedFromConversationKey: legacyKey,
+        };
+        state = await mutateState(config, key, migrated, (current) => current);
+      }
+    }
+  }
   if (!state || typeof state !== "object") {
     const provider = allowed.includes(config.provider) ? config.provider : allowed[0];
     state = {
@@ -1386,7 +1473,13 @@ async function stateForTurn(config, messages, sessionOptions) {
     };
     state = await mutateState(config, key, state, (current) => current);
   }
-  return { state, key };
+  return {
+    state,
+    key,
+    identity: linkedKey
+      ? { source: "tool-link", fields: identity.fields }
+      : identity,
+  };
 }
 
 async function appendAudit(config, event) {
@@ -1618,7 +1711,7 @@ export async function runTurn(input, dependencies = {}) {
   const messages = Array.isArray(input.messages) ? input.messages : [];
   const tools = Array.isArray(input.tools) ? input.tools : [];
   const sessionOptions = input.sessionOptions && typeof input.sessionOptions === "object" ? input.sessionOptions : {};
-  const { state, key } = await stateForTurn(config, messages, sessionOptions);
+  const { state, key, identity } = await stateForTurn(config, messages, sessionOptions);
   const turnFingerprint = userTurnFingerprint(messages);
   const automationContinuation = latestAutomationCompletionIndex(messages) > latestUserIndex(messages);
   const continuationSignature = automationContinuation
@@ -1629,6 +1722,8 @@ export async function runTurn(input, dependencies = {}) {
       event: "turn_suppressed",
       reason,
       sessionId: state.sessionId,
+      identitySource: identity.source,
+      identityFields: identity.fields,
       provider: state.provider,
       model: state.model,
       messageShapes: messages.slice(-8).map(auditMessageShape),
@@ -1678,6 +1773,14 @@ export async function runTurn(input, dependencies = {}) {
     ? null
     : await controlResult(config, key, state, latestUserText(messages));
   if (control) {
+    await appendAudit(config, {
+      event: "control_turn",
+      sessionId: state.sessionId,
+      identitySource: identity.source,
+      identityFields: identity.fields,
+      provider: state.provider,
+      model: state.model,
+    });
     return { ok: true, ...control };
   }
   const completedTurnStillFresh = Number(state.completedTurnAt || 0) > 0
@@ -1709,6 +1812,8 @@ export async function runTurn(input, dependencies = {}) {
   await appendAudit(config, {
     event: "turn_start",
     sessionId: state.sessionId,
+    identitySource: identity.source,
+    identityFields: identity.fields,
     provider: state.provider,
     model: state.model,
     messageCount: messages.length,
