@@ -45,6 +45,13 @@ Do not change a Pending row to Pass from code inspection alone. Capture the exac
 - [GitHub CI run 33360355061](https://github.com/promptadvisers/grokrouter/actions/runs/33360355061) passed both jobs. The Windows Server runner built and uploaded x64/Arm64 ZIPs, checksums, and required native Inno Setup executables; the Mac runner built and uploaded its package.
 - This evidence proves source, tests, and packaging only. It does not replace the exact-candidate Mac reinstall/fresh-Bot gate or a native Windows launch → install → restore → reinstall → fresh-Bot cycle.
 
+## 2026-08-31 beta.40 pre-install control
+
+- The signed beta.40 Mac installer opened against official Grok Bot 0.30.0 and displayed the expected exact-version install gate. No install action was taken during this control capture.
+- The router already installed in Grok Bot was confirmed to predate beta.40: `/models` returned the packaged OpenRouter catalog, while `/doctor` was not intercepted and instead reached ordinary model inference.
+- Grok Bot's native **New channel** flow exposed a name field and a selectable roster of existing Bots. In an existing Bot, typing `/` produced no native router-command menu. The unsaved channel and command drafts were discarded without creating a channel or sending a message.
+- These observations are the before-state only. They do not change either exact-candidate live row above from pending.
+
 ## 2026-08-30 beta.39 recovery evidence
 
 - After the beta.38 install/restore/reinstall pass, Grok later presented a new Bot on a stock host while retaining the persistent provider runner and configuration. `/provider` therefore reached stock Grok as ordinary chat, and its ad hoc inspection reported `stock-or-unknown` with no router marker.
