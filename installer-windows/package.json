@@ -1,0 +1,18 @@
+{
+  "name": "grokrouter-windows-installer",
+  "version": "0.1.0-beta.39",
+  "private": true,
+  "description": "Native Windows delivery shell for GrokRouter",
+  "main": "main.cjs",
+  "author": "Prompt Advisers",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
+    "tesseract.js": "7.0.0",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "40.10.6"
+  }
+}
