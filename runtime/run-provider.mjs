@@ -9,7 +9,7 @@ const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
-const ROUTER_VERSION = "0.1.0-beta.40";
+const ROUTER_VERSION = "0.1.0-beta.41";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
   "sendtouser",
@@ -140,6 +140,27 @@ export function addressedRouterControlText(input) {
     return trimmed;
   }
   return trimmed.slice(slashIndex).trim();
+}
+
+const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_COMMAND:\s*(\/(?:providers?|models?|reasoning|router|doctor))(?:\s|$)/ig;
+
+export function nativeWorkflowControlText(messages) {
+  for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    const role = messageRole(message);
+    if (role !== "user" && role !== "human") continue;
+    const raw = collectText(message?.content ?? message);
+    const markers = [...raw.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
+    if (markers.length === 0) return "";
+    const base = markers[markers.length - 1][1].toLowerCase();
+    const commandName = base.slice(1);
+    const visible = extractUserQuery(raw).trim();
+    const selected = visible.match(new RegExp(`^/?${commandName}(?:\\s+([\\s\\S]+))?$`, "i"));
+    if (!selected) return base;
+    const argument = String(selected[1] || "").trim();
+    return argument ? `${base} ${argument}` : base;
+  }
+  return "";
 }
 
 export function userTurnFingerprint(messages) {
@@ -1804,9 +1825,11 @@ export async function runTurn(input, dependencies = {}) {
       return suppressed("automation-continuation-already-claimed-or-processed");
     }
   }
+  const controlText = nativeWorkflowControlText(messages)
+    || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation
     ? null
-    : await controlResult(config, key, state, addressedRouterControlText(latestUserText(messages)));
+    : await controlResult(config, key, state, controlText);
   if (control) {
     await appendAudit(config, {
       event: "control_turn",

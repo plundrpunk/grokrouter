@@ -16,6 +16,7 @@ import {
   extractUserQuery,
   hasDeliveryAfterLatestQuery,
   latestUserText,
+  nativeWorkflowControlText,
   normalizeTools,
   openRouterMessages,
   recoveredTextualOpenRouterToolCalls,
@@ -40,6 +41,20 @@ test("extracts router controls only from exact or pure group-addressed input", (
     "Please ask @Research Bot to run /provider",
   );
   assert.equal(addressedRouterControlText("@Research Bot, /provider"), "@Research Bot, /provider");
+});
+
+test("extracts deterministic controls from Grok's registered workflow envelope only", () => {
+  const envelope = (name, command, query) => user([
+    `# GrokRouter ${name}`,
+    `GROKROUTER_NATIVE_COMMAND: ${command}`,
+    `<user_query>${query}</user_query>`,
+  ].join("\n\n"));
+  assert.equal(nativeWorkflowControlText([envelope("Doctor", "/doctor", "doctor")]), "/doctor");
+  assert.equal(
+    nativeWorkflowControlText([envelope("provider control", "/provider", "provider openrouter")]),
+    "/provider openrouter",
+  );
+  assert.equal(nativeWorkflowControlText([user("doctor")]), "");
 });
 
 test("extracts the newest visible Grok user query", () => {
@@ -1184,6 +1199,22 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
     }, { fetchImpl: neverInfer });
     assert.match(doctor.text, /Router 0\.1\.0-beta\./);
     assert.equal(doctor.control, true);
+
+    const nativeDoctor = await runTurn({
+      config,
+      messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
+      sessionOptions: { botId: "native-workflow-bot" },
+    }, { fetchImpl: neverInfer });
+    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.41: OK/);
+    assert.equal(nativeDoctor.control, true);
+
+    const nativeProvider = await runTurn({
+      config,
+      messages: [user("# GrokRouter provider control\n\nGROKROUTER_NATIVE_COMMAND: /provider\n\n<user_query>provider openrouter</user_query>")],
+      sessionOptions: { botId: "native-workflow-bot" },
+    }, { fetchImpl: neverInfer });
+    assert.match(nativeProvider.text, /Switched this bot from OpenRouter/);
+    assert.equal(nativeProvider.control, true);
 
     const pluralAlias = await runTurn({
       config,

@@ -181,18 +181,9 @@ elif value:
 else:
     print("  Credential: not configured")
 PY
-    printf 'Slash discovery\n'
-    for skill_name in provider models model reasoning router doctor; do
-      skill_source="$INSTALL_ROOT/skills/$skill_name"
-      skill_link="$GROK_SKILLS_ROOT/$skill_name"
-      if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
-        printf '  /%s: installed\n' "$skill_name"
-      elif [[ -e "$skill_link" || -L "$skill_link" ]]; then
-        printf '  /%s: name conflict at %s\n' "$skill_name" "$skill_link"
-      else
-        printf '  /%s: missing\n' "$skill_name"
-      fi
-    done
+    printf 'Native commands\n'
+    printf '  Registration is managed per Bot by the GrokRouter desktop installer.\n'
+    printf '  Run Repair in GrokRouter to sync Bots or channels created after installation.\n'
     printf 'GROKBOT_ROUTER_DOCTOR_DONE\n'
     exit "$doctor_ok"
     ;;

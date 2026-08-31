@@ -473,6 +473,51 @@ function payloadPath() {
   return candidate;
 }
 
+const NATIVE_WORKFLOW_NAMES = Object.freeze(["provider", "models", "model", "reasoning", "router", "doctor"]);
+
+function nativeWorkflowDefinitions() {
+  const directory = path.join(app.getAppPath(), "assets", "grokrouter-native-skills");
+  return NATIVE_WORKFLOW_NAMES.map((name) => {
+    const markdown = fs.readFileSync(path.join(directory, name, "SKILL.md"), "utf8");
+    const frontmatter = markdown.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/);
+    if (!frontmatter) throw new Error(`Native command /${name} has invalid frontmatter.`);
+    const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim();
+    const body = frontmatter[2].trim();
+    if (!description || !body.includes(`GROKROUTER_NATIVE_COMMAND: /${name}`)) {
+      throw new Error(`Native command /${name} is missing its ownership marker.`);
+    }
+    return { name, description, body, markdown };
+  });
+}
+
+function nativeWorkflowExpression(operation) {
+  const scriptPath = path.join(app.getAppPath(), "assets", "native-workflow-registration.js");
+  let script = fs.readFileSync(scriptPath, "utf8");
+  for (const [marker, value] of [
+    ["__GROKROUTER_NATIVE_SKILLS__", nativeWorkflowDefinitions()],
+    ["__GROKROUTER_NATIVE_OPERATION__", operation],
+  ]) {
+    if (script.split(marker).length !== 2) throw new Error(`Native command bridge marker ${marker} is invalid.`);
+    script = script.replace(marker, JSON.stringify(value));
+  }
+  return script;
+}
+
+async function updateNativeWorkflows(client, pageSession, operation = "sync") {
+  const response = await evaluate(client, pageSession, nativeWorkflowExpression(operation));
+  const encoded = response.result?.value;
+  if (typeof encoded !== "string") throw new Error("Grok Bot did not return a native command registration receipt.");
+  const stats = JSON.parse(encoded);
+  if (stats.unavailable) log(`${stats.unavailable} Bot or channel workflow stores were unavailable; run Repair after opening them.`);
+  if (stats.conflicts) log(`${stats.conflicts} user-owned slash commands were preserved because their names conflict.`);
+  if (operation === "remove") {
+    log(`Removed ${stats.removed} GrokRouter command entries from ${stats.bots} Bots and channels.`);
+  } else {
+    log(`Registered ${stats.installed + stats.updated} GrokRouter command entries across ${stats.bots} Bots and channels.`);
+  }
+  return stats;
+}
+
 function validatedInstallOptions(raw) {
   const providers = Array.isArray(raw.providers) ? [...new Set(raw.providers)] : [];
   if (!providers.length || providers.some((item) => item !== "codex" && item !== "openrouter")) throw new Error("Choose Codex SDK, OpenRouter, or both.");
@@ -524,6 +569,8 @@ async function installRouter(executable, rawOptions) {
     log("Installing pinned dependencies and applying the reversible host adapter…");
     await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client, installVNC, 360);
     log("The Bot computer reported a successful install.");
+    log("Registering native slash commands through Grok Bot's workflow service…");
+    await updateNativeWorkflows(client, pageSession);
     await evaluate(client, pageSession, "window.desktop.forceGatewayReconnect().then(()=>true)").catch(() => {});
     if (options.defaultProvider === "openrouter") return "Installed with OpenRouter selected. Send /router doctor in Grok Bot.";
     if (options.providers.includes("codex")) return "Installed. Click Codex sign-in, then send /router doctor in Grok Bot.";
@@ -546,8 +593,10 @@ async function sendRemoteAction(executable, action) {
   try {
     const pageSession = await mainPageSession(client);
     const descriptor = REMOTE_ACTIONS[action];
+    if (action === "uninstall") await updateNativeWorkflows(client, pageSession, "remove");
     const vnc = await typeRemoteCommandsResilient([descriptor.command], client, pageSession);
     await waitForSentinel(descriptor.sentinel, client, vnc, 45);
+    if (action === "repair") await updateNativeWorkflows(client, pageSession);
     return descriptor.message;
   } finally {
     client.close();

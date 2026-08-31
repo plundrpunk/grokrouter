@@ -525,7 +525,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             try await self.sendRemoteCommand(
                 "/home/box/.local/bin/grokbot-router repair",
                 relaunch: false,
-                confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK"
+                confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK",
+                nativeWorkflowOperation: "sync"
             )
             return "Router repaired. Automatic repair is enabled. Send /provider in Grok Bot."
         }
@@ -542,7 +543,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             try await self.sendRemoteCommand(
                 "/home/box/.local/bin/grokbot-router uninstall",
                 relaunch: false,
-                confirmationSentinel: "GROKBOT_ROUTER_UNINSTALL_OK"
+                confirmationSentinel: "GROKBOT_ROUTER_UNINSTALL_OK",
+                nativeWorkflowOperation: "remove"
             )
             return "Restore command sent. Grok Bot will reconnect to its stock host."
         }
@@ -1030,6 +1032,97 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         return url
     }
 
+    private let nativeWorkflowNames = ["provider", "models", "model", "reasoning", "router", "doctor"]
+
+    private func nativeWorkflowDefinitions() throws -> [[String: String]] {
+        guard let resources = Bundle.main.resourceURL else {
+            throw InstallerError.message("Installer resources are unavailable.")
+        }
+        let directory = resources.appendingPathComponent("grokrouter-native-skills", isDirectory: true)
+        return try nativeWorkflowNames.map { name in
+            let url = directory.appendingPathComponent(name, isDirectory: true).appendingPathComponent("SKILL.md")
+            let markdown = try String(contentsOf: url, encoding: .utf8)
+            let pattern = #"(?s)^---\r?\n(.*?)\r?\n---\r?\n(.*)$"#
+            let regex = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(markdown.startIndex..<markdown.endIndex, in: markdown)
+            guard let match = regex.firstMatch(in: markdown, range: range),
+                  let frontmatterRange = Range(match.range(at: 1), in: markdown),
+                  let bodyRange = Range(match.range(at: 2), in: markdown) else {
+                throw InstallerError.message("Native command /\(name) has invalid frontmatter.")
+            }
+            let frontmatter = String(markdown[frontmatterRange])
+            let body = String(markdown[bodyRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let description = frontmatter.split(whereSeparator: { $0.isNewline })
+                .first { $0.hasPrefix("description:") }
+                .map { String($0.dropFirst("description:".count)).trimmingCharacters(in: .whitespaces) } ?? ""
+            guard !description.isEmpty, body.contains("GROKROUTER_NATIVE_COMMAND: /\(name)") else {
+                throw InstallerError.message("Native command /\(name) is missing its ownership marker.")
+            }
+            return ["name": name, "description": description, "body": body, "markdown": markdown]
+        }
+    }
+
+    private func nativeWorkflowExpression(operation: String) throws -> String {
+        guard let scriptURL = Bundle.main.url(forResource: "native-workflow-registration", withExtension: "js") else {
+            throw InstallerError.message("Native command bridge is missing.")
+        }
+        var script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let definitionsData = try JSONSerialization.data(withJSONObject: nativeWorkflowDefinitions())
+        let operationData = try JSONSerialization.data(withJSONObject: [operation])
+        guard let definitions = String(data: definitionsData, encoding: .utf8),
+              let operationArray = String(data: operationData, encoding: .utf8) else {
+            throw InstallerError.message("Native command definitions could not be encoded.")
+        }
+        let replacements = [
+            ("__GROKROUTER_NATIVE_SKILLS__", definitions),
+            ("__GROKROUTER_NATIVE_OPERATION__", String(operationArray.dropFirst().dropLast()))
+        ]
+        for (marker, replacement) in replacements {
+            guard script.components(separatedBy: marker).count == 2 else {
+                throw InstallerError.message("Native command bridge marker \(marker) is invalid.")
+            }
+            script = script.replacingOccurrences(of: marker, with: replacement)
+        }
+        return script
+    }
+
+    @discardableResult
+    private func updateNativeWorkflows(
+        _ client: CDPClient,
+        pageSession: String,
+        operation: String = "sync"
+    ) async throws -> [String: Any] {
+        let response = try await evaluate(
+            client,
+            sessionID: pageSession,
+            expression: try nativeWorkflowExpression(operation: operation)
+        )
+        guard let remoteObject = response["result"] as? [String: Any],
+              let encoded = remoteObject["value"] as? String,
+              let data = encoded.data(using: .utf8),
+              let stats = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw InstallerError.message("Grok Bot did not return a native command registration receipt.")
+        }
+        let bots = (stats["bots"] as? NSNumber)?.intValue ?? 0
+        let installed = (stats["installed"] as? NSNumber)?.intValue ?? 0
+        let updated = (stats["updated"] as? NSNumber)?.intValue ?? 0
+        let removed = (stats["removed"] as? NSNumber)?.intValue ?? 0
+        let conflicts = (stats["conflicts"] as? NSNumber)?.intValue ?? 0
+        let unavailable = (stats["unavailable"] as? NSNumber)?.intValue ?? 0
+        if unavailable > 0 {
+            appendLog("\(unavailable) Bot or channel workflow stores were unavailable; run Repair after opening them.")
+        }
+        if conflicts > 0 {
+            appendLog("\(conflicts) user-owned slash commands were preserved because their names conflict.")
+        }
+        if operation == "remove" {
+            appendLog("Removed \(removed) GrokRouter command entries from \(bots) Bots and channels.")
+        } else {
+            appendLog("Registered \(installed + updated) GrokRouter command entries across \(bots) Bots and channels.")
+        }
+        return stats
+    }
+
     private func install(
         defaultProvider: String,
         providers: String,
@@ -1095,6 +1188,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         appendLog("Installing pinned dependencies and applying the reversible host adapter…")
         try await waitForSentinel("GROKBOT_ROUTER_INSTALL_OK", client: client, vnc: installVNC, timeoutSeconds: 360)
         appendLog("The Bot computer reported a successful install.")
+        appendLog("Registering native slash commands through Grok Bot's workflow service…")
+        try await updateNativeWorkflows(client, pageSession: pageSession)
         _ = try? await evaluate(client, sessionID: pageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         if defaultProvider == "openrouter" {
             return "Installed with OpenRouter selected. Send /router doctor in Grok Bot."
@@ -1108,7 +1203,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     private func sendRemoteCommand(
         _ command: String,
         relaunch: Bool,
-        confirmationSentinel: String? = nil
+        confirmationSentinel: String? = nil,
+        nativeWorkflowOperation: String? = nil
     ) async throws {
         try validateGrokApp()
         let existingEndpoint = try? await browserWebSocketURL()
@@ -1117,9 +1213,15 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         }
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
+        if nativeWorkflowOperation == "remove" {
+            try await updateNativeWorkflows(client, pageSession: pageSession, operation: "remove")
+        }
         let vnc = try await typeRemoteCommandsResilient([command], client: client, pageSession: pageSession)
         if let confirmationSentinel {
             try await waitForSentinel(confirmationSentinel, client: client, vnc: vnc, timeoutSeconds: 45)
+        }
+        if nativeWorkflowOperation == "sync" {
+            try await updateNativeWorkflows(client, pageSession: pageSession)
         }
     }
 }

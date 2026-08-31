@@ -19,10 +19,12 @@ create_zip() {
 bash "$PROJECT_ROOT/scripts/build-payload.sh" >/dev/null
 
 rm -rf "$APP_ROOT"
-mkdir -p "$MACOS" "$RESOURCES"
+mkdir -p "$MACOS" "$RESOURCES/grokrouter-native-skills"
 cp "$PROJECT_ROOT/installer/Info.plist" "$CONTENTS/Info.plist"
 cp "$ARCHIVE" "$RESOURCES/grokbot-router-payload.tgz"
 cp "$PROJECT_ROOT/installer/Assets/AppIcon.icns" "$RESOURCES/AppIcon.icns"
+cp "$PROJECT_ROOT/installer/native-workflow-registration.js" "$RESOURCES/native-workflow-registration.js"
+cp -R "$PROJECT_ROOT/skills/." "$RESOURCES/grokrouter-native-skills/"
 
 swiftc \
   -swift-version 5 \

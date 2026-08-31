@@ -34,7 +34,7 @@ cleanup() {
 trap cleanup EXIT
 
 PAYLOAD="$(bash "$PROJECT_ROOT/scripts/build-payload.sh")"
-mkdir -p "$STAGE_ROOT/assets" "$BUILD_ROOT/windows"
+mkdir -p "$STAGE_ROOT/assets/grokrouter-native-skills" "$BUILD_ROOT/windows"
 cp "$PROJECT_ROOT/installer-windows/package.json" "$STAGE_ROOT/package.json"
 cp "$PROJECT_ROOT/installer-windows/package-lock.json" "$STAGE_ROOT/package-lock.json"
 cp "$PROJECT_ROOT/installer-windows/main.cjs" "$STAGE_ROOT/main.cjs"
@@ -45,6 +45,8 @@ cp "$PROJECT_ROOT/installer-windows/renderer.js" "$STAGE_ROOT/renderer.js"
 cp "$PROJECT_ROOT/installer-windows/assets/grokrouter-mascot.png" "$STAGE_ROOT/assets/grokrouter-mascot.png"
 cp "$PROJECT_ROOT/installer/Assets/AppIcon.ico" "$STAGE_ROOT/assets/AppIcon.ico"
 cp "$PAYLOAD" "$STAGE_ROOT/assets/grokbot-router-payload.tgz"
+cp "$PROJECT_ROOT/installer/native-workflow-registration.js" "$STAGE_ROOT/assets/native-workflow-registration.js"
+cp -R "$PROJECT_ROOT/skills/." "$STAGE_ROOT/assets/grokrouter-native-skills/"
 
 # Keep the source image available for development, but inline it in release
 # packages. This avoids a broken hero image when Windows extraction, antivirus,

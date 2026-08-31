@@ -56,6 +56,12 @@ grep -q 'installPayload.*base64EncodedString' "$PROJECT_ROOT/installer/GrokBotRo
 grep -q 'confirmationSentinel: "Welcome to Codex"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'confirmationSentinel: "GROKBOT_ROUTER_DOCTOR_DONE"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'confirmationSentinel: "GROKBOT_ROUTER_REPAIR_OK"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'native-workflow-registration' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'updateNativeWorkflows' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'GROKROUTER_NATIVE_COMMAND' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'app.workflows.install' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'app.workflows.update' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'app.workflows.remove' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'private let repairButton' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -67,6 +73,7 @@ grep -q 'InstallerCardView' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swif
 grep -q 'window.title = "GrokRouter"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 [[ "$(grep -c '<string>GrokRouter</string>' "$PROJECT_ROOT/installer/Info.plist")" -eq 2 ]]
 grep -Fq 'APP_ROOT="$BUILD_ROOT/GrokRouter.app"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
+grep -q 'grokrouter-native-skills' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -Fq 'ZIP_PATH="$BUILD_ROOT/grokrouter-${VERSION}-macos.zip"' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 ! grep -q 'DMG_PATH\|hdiutil create' "$PROJECT_ROOT/scripts/build-macos-app.sh"
@@ -115,6 +122,7 @@ for skill_name in provider models model reasoning router doctor; do
   [[ -f "$PAYLOAD/skills/$skill_name/SKILL.md" ]]
   grep -q '^user-invocable: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
+  grep -q "^GROKROUTER_NATIVE_COMMAND: /$skill_name$" "$PAYLOAD/skills/$skill_name/SKILL.md"
 done
 
 HOST_FIXTURE="$PROJECT_ROOT/tests/fixtures/host-main.cjs"
@@ -145,10 +153,9 @@ grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -L "$TEST_BIN/grokbot-router" ]]
 [[ -x "$TEST_RUNTIME/bin/grokbot-router-watchdog" ]]
 for skill_name in provider models model reasoning router doctor; do
-  [[ -L "$TEST_GROK_SKILLS/$skill_name" ]]
-  [[ "$(readlink "$TEST_GROK_SKILLS/$skill_name")" == "$TEST_RUNTIME/skills/$skill_name" ]]
+  [[ ! -e "$TEST_GROK_SKILLS/$skill_name" && ! -L "$TEST_GROK_SKILLS/$skill_name" ]]
 done
-rm "$TEST_GROK_SKILLS/reasoning"
+ln -s "$TEST_RUNTIME/skills/provider" "$TEST_GROK_SKILLS/provider"
 mkdir "$TEST_GROK_SKILLS/reasoning"
 printf 'user-owned\n' > "$TEST_GROK_SKILLS/reasoning/KEEP"
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: codex'
@@ -194,6 +201,7 @@ bash "$PAYLOAD/remote/install.sh" \
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
+[[ ! -e "$TEST_GROK_SKILLS/provider" && ! -L "$TEST_GROK_SKILLS/provider" ]]
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
   --allow-unknown-host \

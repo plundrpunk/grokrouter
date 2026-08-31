@@ -11,4 +11,6 @@ metadata:
 
 # GrokRouter reasoning control
 
+GROKROUTER_NATIVE_COMMAND: /reasoning
+
 Use this only through its `/reasoning` slash entry. Preserve the literal invocation and effort argument. GrokRouter intercepts the command before model inference and returns the authoritative receipt.

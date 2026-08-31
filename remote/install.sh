@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROUTER_VERSION="0.1.0-beta.40"
+ROUTER_VERSION="0.1.0-beta.41"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
@@ -132,7 +132,7 @@ for required in \
 done
 for skill_name in provider models model reasoning router doctor; do
   if [[ ! -f "$PAYLOAD_ROOT/skills/$skill_name/SKILL.md" ]]; then
-    printf 'ERROR: payload is missing the /%s discovery skill\n' "$skill_name" >&2
+    printf 'ERROR: payload is missing the /%s native command definition\n' "$skill_name" >&2
     exit 1
   fi
 done
@@ -258,19 +258,16 @@ if ! python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"; then
   exit 1
 fi
 
-# Grok discovers user-invocable skills from ~/.grok/skills and renders them in
-# its native slash menu. Link only empty names or links already owned by this
-# installation; never overwrite a user's existing skill with a generic name.
+# Beta.40 incorrectly treated loose ~/.grok/skills links as native slash-menu
+# registration. Grok 0.30.0 actually reads a per-Bot workflow store. The
+# desktop installer owns that official registration step; remove only the
+# obsolete links created by older GrokRouter builds and preserve user content.
 mkdir -p "$GROK_SKILLS_ROOT"
 for skill_name in provider models model reasoning router doctor; do
   skill_source="$INSTALL_ROOT/skills/$skill_name"
   skill_link="$GROK_SKILLS_ROOT/$skill_name"
   if [[ -L "$skill_link" && "$(readlink "$skill_link")" == "$skill_source" ]]; then
-    ln -sfn "$skill_source" "$skill_link"
-  elif [[ ! -e "$skill_link" && ! -L "$skill_link" ]]; then
-    ln -s "$skill_source" "$skill_link"
-  else
-    printf 'WARNING: /%s discovery was skipped because %s already exists\n' "$skill_name" "$skill_link" >&2
+    rm "$skill_link"
   fi
 done
 
