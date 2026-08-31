@@ -745,6 +745,61 @@ test("an explicitly named offered tool is forced by name on the first round", as
   }
 });
 
+test("OpenRouter forces real subagent discovery and never invents missing orchestration", async () => {
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  const bodies = [];
+  try {
+    const discovered = await runOpenRouter(
+      { openRouterModel: "openai/gpt-5.6-luna" },
+      [user("Delegate this research to a sub-agent")],
+      [
+        { name: "GetDynamicTools", inputSchema: { type: "object" } },
+        { name: "CallDynamicTool", inputSchema: { type: "object" } },
+      ],
+      async (_url, init) => {
+        bodies.push(JSON.parse(init.body));
+        return new Response(JSON.stringify({
+          model: "openai/gpt-5.6-luna",
+          choices: [{ message: {
+            content: "",
+            tool_calls: [{
+              id: "discover-subagent-1",
+              function: { name: "GetDynamicTools", arguments: '{"query":"subagent"}' },
+            }],
+          } }],
+        }), { status: 200 });
+      },
+    );
+    assert.deepEqual(bodies[0].tool_choice, {
+      type: "function",
+      function: { name: "GetDynamicTools" },
+    });
+    assert.match(bodies[0].messages[0].content, /explicitly requested delegation/);
+    assert.equal(discovered.toolCalls[0].toolName, "GetDynamicTools");
+
+    const unavailable = await runOpenRouter(
+      { openRouterModel: "openai/gpt-5.6-luna" },
+      [user("Use a background agent to do this")],
+      [],
+      async (_url, init) => {
+        bodies.push(JSON.parse(init.body));
+        return new Response(JSON.stringify({
+          model: "openai/gpt-5.6-luna",
+          choices: [{ message: { content: "No orchestration tool is available in this turn.", tool_calls: [] } }],
+        }), { status: 200 });
+      },
+    );
+    assert.equal(bodies[1].tools, undefined);
+    assert.equal(bodies[1].tool_choice, undefined);
+    assert.match(bodies[1].messages[0].content, /cannot launch a real sub-agent/);
+    assert.equal(unavailable.text, "No orchestration tool is available in this turn.");
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+  }
+});
+
 test("OpenRouter rejects a placeholder credential before making a request", async () => {
   const previous = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = "paste-key-here";

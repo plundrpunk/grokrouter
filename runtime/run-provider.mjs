@@ -888,12 +888,20 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
   const currentUserIndex = latestUserIndex(messages);
   const currentTurnHasToolResult = currentUserIndex >= 0
     && messages.slice(currentUserIndex + 1).some((message) => toolResultCallIds(message).size > 0);
+  const subagentRequest = !currentTurnHasToolResult
+    && /\b(?:sub[ -]?agent|delegate|delegation|background agent|parallel agent)\b/i.test(visibleUserText);
   const explicitToolRequest = offeredTools.length > 0
     && !currentTurnHasToolResult
     && /\b(?:use|call|invoke)\b[\s\S]{0,100}\btool\b/i.test(visibleUserText);
   const explicitlyNamedOfferedTool = explicitToolRequest
     ? offeredTools.find((tool) => textExplicitlyNamesTool(visibleUserText, tool.function.name))
     : null;
+  const subagentOrchestrationTool = subagentRequest
+    ? offeredTools.find((tool) => /(?:sub.?agent|delegate|spawn.*agent)/i.test(tool.function.name))
+      ?? offeredTools.find((tool) => tool.function.name.toLowerCase() === "getdynamictools")
+    : null;
+  const forcedTool = explicitlyNamedOfferedTool ?? subagentOrchestrationTool;
+  const requiresTool = explicitToolRequest || Boolean(subagentOrchestrationTool);
   const body = {
     model,
     messages: [
@@ -910,6 +918,12 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
             "Invoke an available tool only through the API's native tool-calling field. Never print or narrate tool-call markup such as to=functions, code:, or JSON arguments as assistant text.",
             "If a dynamic tool such as Shell is not in that offered list, use the offered GetDynamicTools or CallDynamicTool broker natively; never print or invent a direct unoffered function call.",
           ] : []),
+          ...(subagentRequest && subagentOrchestrationTool ? [
+            `The user explicitly requested delegation. Start with the offered ${subagentOrchestrationTool.function.name} orchestration path and wait for its real completion.`,
+          ] : []),
+          ...(subagentRequest && offeredTools.length === 0 ? [
+            "The Grok host exposed no actionable tool schema in this turn. You cannot launch a real sub-agent, so do not claim that one started or finished; state the limitation briefly and continue directly only if useful.",
+          ] : []),
           ...(automaticGreeting ? ["This is Grok Bot's automatic new-Bot greeting. Return one short friendly greeting directly and do not use tools."] : []),
         ].join(" "),
       },
@@ -917,9 +931,9 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
     ],
     ...(offeredTools.length ? {
       tools: offeredTools,
-      tool_choice: explicitlyNamedOfferedTool
-        ? { type: "function", function: { name: explicitlyNamedOfferedTool.function.name } }
-        : explicitToolRequest ? "required" : "auto",
+      tool_choice: forcedTool
+        ? { type: "function", function: { name: forcedTool.function.name } }
+        : requiresTool ? "required" : "auto",
       parallel_tool_calls: false,
     } : {}),
     reasoning: { effort: config.openRouterReasoning || "medium" },
@@ -963,9 +977,9 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
       text: recoveredToolCalls.length ? "" : text,
       toolCalls: nativeToolCalls.length ? nativeToolCalls : recoveredToolCalls,
       recoveredTextualToolCall: recoveredToolCalls.length > 0,
-      ...(explicitToolRequest ? {
+      ...(requiresTool ? {
         textualToolDiagnostics: {
-          requestedTool: explicitlyNamedOfferedTool?.function?.name || null,
+          requestedTool: forcedTool?.function?.name || null,
           responseCharacters: text.length,
           functionMarkerCount: (text.match(/to=functions\./g) || []).length,
           objectStartCount: (text.match(/{/g) || []).length,

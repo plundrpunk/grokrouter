@@ -26,6 +26,7 @@ In the same first Bot, prove each enabled provider with reversible, non-sensitiv
 - Create a small proof file with Grok's outer `Shell`, read it with outer `Read`, and verify the exact contents.
 - Request a screenshot and identify one visible, non-sensitive window.
 - Discover and run one small dynamic sub-agent task. Wait for the finished child's result to appear in the parent chat. A launch acknowledgement or `CheckSubagent` status alone is not a pass.
+- For OpenRouter, inspect the first request/audit receipt: an explicit delegation request must force a supplied dedicated orchestration tool or `GetDynamicTools`. If the host supplied zero actionable schemas, the visible answer must state that limitation and must not claim a child started.
 - After the child result appears, wait through the next host continuation and confirm the result is not inferred or delivered a second time.
 - Inspect the redacted audit log and confirm the exact provider/model and expected tool names.
 - Confirm every suppressed host continuation produces a redacted `turn_suppressed` receipt with a specific reason. A silent audit gap is a failure.
