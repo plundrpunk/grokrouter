@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   actionableTools,
+  addressedRouterControlText,
   automationCompletionId,
   automationCompletionText,
   automationContinuationSignature,
@@ -27,6 +28,18 @@ import {
 
 const user = (text) => ({ role: "user", content: [{ type: "text", text }] });
 const TEST_OPENROUTER_KEY = ["sk", "or", "v1", "syntheticfixture0000000000000000"].join("-");
+
+test("extracts router controls only from exact or pure group-addressed input", () => {
+  assert.equal(addressedRouterControlText("/provider"), "/provider");
+  assert.equal(addressedRouterControlText("@Research Bot /provider"), "/provider");
+  assert.equal(addressedRouterControlText("@[Research Bot](bot-123) /models"), "/models");
+  assert.equal(addressedRouterControlText("@分析 Bot /model openai/gpt-5.6-luna"), "/model openai/gpt-5.6-luna");
+  assert.equal(
+    addressedRouterControlText("Please ask @Research Bot to run /provider"),
+    "Please ask @Research Bot to run /provider",
+  );
+  assert.equal(addressedRouterControlText("@Research Bot, /provider"), "@Research Bot, /provider");
+});
 
 test("extracts the newest visible Grok user query", () => {
   const hidden = "[SAND_HIDDEN_PROMPT] internal";
@@ -941,6 +954,32 @@ test("group conversations keep router state attached to each Bot, not the channe
   assert.notEqual(otherBot.key, direct.key);
   assert.equal(group.source, "bot");
   assert.deepEqual(group.fields, ["botid"]);
+});
+
+test("a group-addressed control changes only the addressed Bot's state", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-group-control-"));
+  const config = {
+    provider: "codex",
+    providers: ["codex", "openrouter"],
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  try {
+    const switched = await runTurn({
+      config,
+      messages: [user("@Research Bot /provider openrouter")],
+      sessionOptions: { botId: "research-bot", channelId: "group-falcon" },
+    });
+    const other = await runTurn({
+      config,
+      messages: [user("@Demo Bot /provider")],
+      sessionOptions: { botId: "demo-bot", channelId: "group-falcon" },
+    });
+    assert.equal(switched.provider, "openrouter");
+    assert.match(other.text, /Codex SDK is active/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("group identity changes do not discard a previously combined-ID router state", async () => {

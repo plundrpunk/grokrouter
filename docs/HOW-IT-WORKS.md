@@ -47,7 +47,7 @@ The original beta.32 failure came from treating a changing request ID as part of
 
 ### A router command
 
-Commands such as `/models`, `/provider` and `/router doctor` are handled by the router before any provider request is made. That is why a model cannot deny that the commands exist or invent a different answer.
+Commands such as `/models`, `/provider` and `/router doctor` are handled by the router before any provider request is made. In a channel, put a Bot mention directly before the command—for example, `@Research Bot /provider`—to inspect or change that Bot without affecting another member. That is why a model cannot deny that the commands exist or invent a different answer.
 
 These are deterministic composer controls, not entries in Grok Bot's native slash-suggestion menu. Type or paste them into the normal message box and press Return.
 

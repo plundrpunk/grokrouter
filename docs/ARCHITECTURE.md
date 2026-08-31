@@ -30,7 +30,7 @@ An update follows the same path. Provider/model selections are preserved unless 
 
 ## Control turn
 
-The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. A recognized command updates only that Bot's state and returns a deterministic receipt through Grok's normal delivery path.
+The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
 
 Controls are not native Grok slash-menu entries. Their determinism comes from interception before inference, not from autocomplete registration. Invalid near-misses and unlisted bare model IDs also stop at the control plane instead of inviting a model to invent an answer.
 

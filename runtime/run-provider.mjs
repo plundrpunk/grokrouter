@@ -122,6 +122,26 @@ export function latestUserText(messages) {
   return "";
 }
 
+const ROUTER_CONTROL_PREFIX = /^\/(?:providers?|models?|reasoning|router)(?:\s|$)/i;
+
+export function addressedRouterControlText(input) {
+  if (typeof input !== "string") return "";
+  const trimmed = input.trim();
+  if (ROUTER_CONTROL_PREFIX.test(trimmed)) return trimmed;
+  const slashIndex = trimmed.search(/\/(?:providers?|models?|reasoning|router)(?:\s|$)/i);
+  if (slashIndex <= 0) return trimmed;
+  const address = trimmed.slice(0, slashIndex).trim();
+  // Grok group messages can retain a leading @Bot mention in the visible
+  // prompt. Accept only a pure address prefix. Natural-language requests such
+  // as "please run /provider" must still go through normal model inference.
+  if (!address.startsWith("@")
+    || /[\n,;!?]/.test(address)
+    || !/^@[\p{L}\p{N}\p{M}\s_.()\[\]{}<>/@:=+\-]+$/u.test(address)) {
+    return trimmed;
+  }
+  return trimmed.slice(slashIndex).trim();
+}
+
 export function userTurnFingerprint(messages) {
   const turns = [];
   for (const message of Array.isArray(messages) ? messages : []) {
@@ -1771,7 +1791,7 @@ export async function runTurn(input, dependencies = {}) {
   }
   const control = automationContinuation
     ? null
-    : await controlResult(config, key, state, latestUserText(messages));
+    : await controlResult(config, key, state, addressedRouterControlText(latestUserText(messages)));
   if (control) {
     await appendAudit(config, {
       event: "control_turn",
