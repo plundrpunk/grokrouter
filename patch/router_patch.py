@@ -20,8 +20,8 @@ import time
 from typing import Any
 
 
-MARKER = "GROKBOT_MODEL_ROUTER_V40"
-LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39))")
+MARKER = "GROKBOT_MODEL_ROUTER_V41"
+LEGACY_MARKER = re.compile(r"(?:GROK_SDK_ADAPTER_V[1-8]|GROKBOT_MODEL_ROUTER_V(?:9|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|32|33|34|35|36|37|38|39|40))")
 DEFAULT_HOST = Path("/home/box/sand-host/host-main.cjs")
 DEFAULT_BACKUP = Path("/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock")
 LEGACY_BACKUPS = (
@@ -32,7 +32,29 @@ DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
 
 
 EXECUTOR_CODE = r'''
-// GROKBOT_MODEL_ROUTER_V40: version-gated Codex SDK and OpenRouter executor.
+// GROKBOT_MODEL_ROUTER_V41: version-gated Codex SDK and OpenRouter executor.
+const grokBotRouterControlReceipts = new Map();
+function pruneGrokBotRouterControlReceipts(now = Date.now()) {
+  for (const [fingerprint, createdAt] of grokBotRouterControlReceipts) {
+    if (now - createdAt > 60_000) grokBotRouterControlReceipts.delete(fingerprint);
+  }
+}
+function grokBotRouterControlReceiptFingerprint(text) {
+  if (typeof text !== "string" || !text.trim()) return "";
+  return require("node:crypto").createHash("sha256").update(text.trim()).digest("hex");
+}
+function rememberGrokBotRouterControlReceipt(text) {
+  const fingerprint = grokBotRouterControlReceiptFingerprint(text);
+  if (!fingerprint) return;
+  pruneGrokBotRouterControlReceipts();
+  grokBotRouterControlReceipts.set(fingerprint, Date.now());
+}
+function isRecentGrokBotRouterControlReceipt(text) {
+  const fingerprint = grokBotRouterControlReceiptFingerprint(text);
+  if (!fingerprint) return false;
+  pruneGrokBotRouterControlReceipts();
+  return grokBotRouterControlReceipts.has(fingerprint);
+}
 function loadGrokBotRouterConfig() {
   const configPath = "/home/box/sand-data/grokbot-router/provider.json";
   try {
@@ -176,11 +198,17 @@ function runGrokBotRouter(config, messages, tools, sessionOptions) {
       resolve(payload);
       });
     });
+    const bridgeSessionOptions = {
+      ...sessionOptions,
+      ...(isRecentGrokBotRouterControlReceipt(sessionOptions?.grokBotRouterControlText)
+        ? { grokBotRouterReceiptReplay: true }
+        : {})
+    };
     child.stdin.end(JSON.stringify({
       config,
       messages,
       tools: serializeGrokBotRouterTools(tools),
-      sessionOptions
+      sessionOptions: bridgeSessionOptions
     }));
   });
 }
@@ -202,6 +230,10 @@ var GrokBotRouterPromptExecutor = class extends MockPromptExecutor {
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           bridgeError: true
         };
+      })
+      .then((result) => {
+        if (result?.control === true) rememberGrokBotRouterControlReceipt(result.text);
+        return result;
       });
     const delegatedPromise = resultPromise.then((result) => {
       const providerToolCalls = Array.isArray(result.toolCalls) ? result.toolCalls : [];
@@ -256,7 +288,7 @@ function createGrokBotRouterPromptExecutor(config, sessionOptions) {
 
 
 SESSION_CODE = r'''
-      // GROKBOT_MODEL_ROUTER_V40: route enabled sessions through the provider adapter.
+      // GROKBOT_MODEL_ROUTER_V41: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
         const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
@@ -345,7 +377,7 @@ def patch_text(source: str) -> str:
         lambda match: (
             f"{match.group(1)}"
             "          ...(boxId != null ? { botId: typeof boxId === \"string\" ? boxId : JSON.stringify(boxId) || String(boxId) } : {}),\n"
-            "          ...(typeof activeRunTranscriptText === \"string\" && activeRunTranscriptText ? { grokBotRouterControlText: activeRunTranscriptText } : {}),\n"
+            "          ...(typeof rawTranscriptText === \"string\" && rawTranscriptText ? { grokBotRouterControlText: rawTranscriptText } : {}),\n"
             f"{match.group(2)}"
         ),
         source,

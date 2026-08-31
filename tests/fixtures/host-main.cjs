@@ -12,7 +12,7 @@ class Host {
 }
 function runInference(host) {
   const boxId = host.resolveBoxId();
-  const activeRunTranscriptText = "@Research Bot /provider";
+  const rawTranscriptText = "@Research Bot /provider";
   const mainSessionOptions = {
           modelId: host.subagentModelId,
           isSubagent: host.isSubagentRunner,

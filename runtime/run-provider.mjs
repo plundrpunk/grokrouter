@@ -1887,6 +1887,9 @@ export async function runTurn(input, dependencies = {}) {
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
     };
   };
+  if (sessionOptions.grokBotRouterReceiptReplay === true) {
+    return suppressed("channel-control-receipt-replay");
+  }
   if (hasDeliveryAfterLatestQuery(messages)) {
     if (turnFingerprint && state.completedTurnFingerprint !== turnFingerprint) {
       const updated = await mergeState(config, key, state, {
@@ -1919,7 +1922,6 @@ export async function runTurn(input, dependencies = {}) {
     }
   }
   const controlText = nativeWorkflowControlText(messages)
-    || addressedRouterControlText(sessionOptions.grokBotRouterControlText)
     || structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation

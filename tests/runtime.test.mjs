@@ -1082,27 +1082,29 @@ test("a group-addressed control changes only the addressed Bot's state", async (
   }
 });
 
-test("a raw host transcript control survives Grok's sanitized channel envelope", async () => {
-  const root = await mkdtemp(join(tmpdir(), "grokbot-router-raw-channel-control-"));
+test("a channel replay of a router control receipt is suppressed before inference", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-channel-receipt-replay-"));
   const config = {
     provider: "openrouter",
     providers: ["codex", "openrouter"],
     statePath: join(root, "states.json"),
     auditPath: join(root, "audit.jsonl"),
   };
-  const neverInfer = async () => { throw new Error("raw control leaked to model inference"); };
+  const neverInfer = async () => { throw new Error("router receipt replay leaked to model inference"); };
   try {
     const result = await runTurn({
       config,
-      messages: [user("Channel orchestration envelope with the original slash command removed")],
+      messages: [user("Channel orchestration envelope after the router delivered its receipt")],
       sessionOptions: {
         botId: "social-guru",
-        channelId: "router-council",
-        grokBotRouterControlText: "@Social Guru /provider",
+        grokBotRouterControlText: "OpenRouter is active for this bot. Model: anthropic/claude-sonnet-4.6. Reasoning: medium.",
+        grokBotRouterReceiptReplay: true,
       },
     }, { fetchImpl: neverInfer });
-    assert.match(result.text, /OpenRouter is active/);
-    assert.equal(result.control, true);
+    assert.equal(result.text, "");
+    assert.equal(result.alreadyDelivered, true);
+    const audit = await readFile(join(root, "audit.jsonl"), "utf8");
+    assert.match(audit, /"reason":"channel-control-receipt-replay"/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
