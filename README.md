@@ -28,19 +28,15 @@ macOS on Apple silicon is the currently live-verified platform. The simplest ins
 
 Install the official **Grok Bot 0.30.0** app and make sure it is in `/Applications`. Open it once and confirm that you can select a Bot and open its Computer.
 
-### 2. Copy this one command into Terminal
+### 2. Download and run the installer
 
-Open **Terminal**, paste the command below, and press Return:
+Click **Code → Download ZIP** on this repository, unzip it, and double-click **Install GrokRouter.command**.
 
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.40/scripts/install-macos.sh)"
-```
+The installer builds GrokRouter from this downloaded source, verifies the local app signature, installs it to `~/Applications/GrokRouter.app`, and opens it. It does not need Git, `sudo`, an installer package, or an Apple signing certificate.
 
-The script downloads this public source, builds GrokRouter on your Mac, verifies the local app signature, installs it to `~/Applications/GrokRouter.app`, and opens it. It does not need Git, `sudo`, an installer package, or an Apple signing certificate.
+If Apple Command Line Tools are missing, macOS will offer to install them. Finish that Apple installation, then double-click **Install GrokRouter.command** again.
 
-If Apple Command Line Tools are missing, macOS will offer to install them. Finish that Apple installation, then run the same command again.
-
-Prefer not to pipe a script into Terminal? Click **Code → Download ZIP**, unzip the repository, and double-click **Install GrokRouter.command**. The complete installer source is [here](scripts/install-macos.sh) for inspection.
+The complete installer source is [here](scripts/install-macos.sh) for inspection.
 
 ### 3. Click Install Router
 
@@ -131,9 +127,9 @@ Anyone can inspect and build the Mac or Windows installer from this repository f
 
 ### Build commands
 
+After cloning or downloading this repository, open its `grokrouter` folder in Terminal and run:
+
 ```bash
-git clone https://github.com/promptadvisers/grokrouter.git
-cd grokrouter
 npm ci --prefix runtime --ignore-scripts --no-audit --no-fund
 npm test
 ```
@@ -329,6 +325,6 @@ Never add a wildcard hash. Never ship a development override. Never call a previ
 ---
 
 <p align="center">
-  <strong>GrokRouter</strong> · Beta by Prompt Advisers<br>
+  <strong>GrokRouter</strong><br>
   The official Grok Bot stays in charge. You choose the model.
 </p>
