@@ -11,6 +11,6 @@ metadata:
 
 # GrokRouter provider control
 
-GROKROUTER_NATIVE_COMMAND: /provider
+GROKROUTER_NATIVE_CONTROL: PROVIDER
 
 Use this only through its `/provider` slash entry. Preserve the literal invocation and any `codex` or `openrouter` argument. GrokRouter intercepts the command before model inference and returns the authoritative receipt.

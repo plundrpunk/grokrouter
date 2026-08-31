@@ -132,7 +132,7 @@ for skill_name in provider models model reasoning router doctor; do
   [[ -f "$PAYLOAD/skills/$skill_name/SKILL.md" ]]
   grep -q '^user-invocable: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
   grep -q '^disable-model-invocation: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"
-  grep -q "^GROKROUTER_NATIVE_COMMAND: /$skill_name$" "$PAYLOAD/skills/$skill_name/SKILL.md"
+  grep -q "^GROKROUTER_NATIVE_CONTROL: $(printf '%s' "$skill_name" | tr '[:lower:]' '[:upper:]')$" "$PAYLOAD/skills/$skill_name/SKILL.md"
 done
 
 HOST_FIXTURE="$PROJECT_ROOT/tests/fixtures/host-main.cjs"
@@ -156,7 +156,7 @@ bash "$PAYLOAD/remote/install.sh" \
   --no-restart \
   >/dev/null
 
-grep -q 'GROKBOT_MODEL_ROUTER_V44' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
 grep -q 'appendGrokBotRouterHostError' "$TEST_HOST"
 grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
@@ -227,7 +227,7 @@ ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
-grep -q 'GROKBOT_MODEL_ROUTER_V44' "$TEST_HOST"
+grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \

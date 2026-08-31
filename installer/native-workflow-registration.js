@@ -1,7 +1,7 @@
 (async () => {
   const definitions = __GROKROUTER_NATIVE_SKILLS__;
   const operation = __GROKROUTER_NATIVE_OPERATION__;
-  const marker = "GROKROUTER_NATIVE_COMMAND:";
+  const markers = ["GROKROUTER_NATIVE_CONTROL:", "GROKROUTER_NATIVE_COMMAND:"];
   const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const withTimeout = (promise, milliseconds, label) => Promise.race([
     promise,
@@ -152,7 +152,7 @@
   for (const definition of definitions) {
     const sameName = workflows.filter((workflow) =>
       String(workflow?.name || "").toLowerCase() === definition.name.toLowerCase());
-    const owned = sameName.filter((workflow) => String(workflow?.body || "").includes(marker)
+    const owned = sameName.filter((workflow) => markers.some((marker) => String(workflow?.body || "").includes(marker))
       || (workflow.source === "workflow" && /GrokRouter/i.test(String(workflow.body || ""))));
     const conflicts = sameName.filter((workflow) => !owned.includes(workflow));
     const keep = operation === "sync" && conflicts.length === 0 ? owned[0] : null;

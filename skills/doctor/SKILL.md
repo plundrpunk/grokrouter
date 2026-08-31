@@ -10,6 +10,6 @@ metadata:
 
 # GrokRouter Doctor
 
-GROKROUTER_NATIVE_COMMAND: /doctor
+GROKROUTER_NATIVE_CONTROL: DOCTOR
 
 Use this only through its `/doctor` slash entry. Preserve the literal invocation. GrokRouter intercepts the command before model inference and returns the same authoritative health receipt as `/router doctor`.

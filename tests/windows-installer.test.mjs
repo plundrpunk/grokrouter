@@ -45,7 +45,7 @@ test("Windows installer preserves verified terminal transport and restore", () =
 test("Windows installer registers native commands through Grok's workflow service", () => {
   assert.match(main, /native-workflow-registration\.js/);
   assert.match(main, /updateNativeWorkflows/);
-  assert.match(main, /GROKROUTER_NATIVE_COMMAND/);
+  assert.match(main, /GROKROUTER_NATIVE_CONTROL/);
   assert.match(main, /user-owned slash commands were preserved/);
   assert.match(build, /grokrouter-native-skills/);
 });

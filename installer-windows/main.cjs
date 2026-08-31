@@ -483,7 +483,7 @@ function nativeWorkflowDefinitions() {
     if (!frontmatter) throw new Error(`Native command /${name} has invalid frontmatter.`);
     const description = frontmatter[1].match(/^description:\s*(.+)$/m)?.[1]?.trim();
     const body = frontmatter[2].trim();
-    if (!description || !body.includes(`GROKROUTER_NATIVE_COMMAND: /${name}`)) {
+    if (!description || !body.includes(`GROKROUTER_NATIVE_CONTROL: ${name.toUpperCase()}`)) {
       throw new Error(`Native command /${name} is missing its ownership marker.`);
     }
     return { name, description, body, markdown };

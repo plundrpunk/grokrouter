@@ -83,6 +83,10 @@ test("extracts deterministic controls from Grok's registered workflow envelope o
     nativeWorkflowControlText([envelope("provider control", "/provider", "provider openrouter")]),
     "/provider openrouter",
   );
+  assert.equal(
+    nativeWorkflowControlText([user("# GrokRouter provider\n\nGROKROUTER_NATIVE_CONTROL: PROVIDER")]),
+    "/provider",
+  );
   assert.equal(nativeWorkflowControlText([user("doctor")]), "");
 });
 
@@ -1095,20 +1099,20 @@ test("a channel control suppresses host-shaped follow-on turns across Bots", asy
   try {
     const control = await runTurn({
       config,
-      messages: [user("Channel envelope with slash stripped")],
+      messages: [user("# GrokRouter provider\n\nGROKROUTER_NATIVE_CONTROL: PROVIDER")],
       sessionOptions: {
         botId: "social-guru",
-        grokBotRouterControlCandidate: { id: "message-1", text: "@Social Guru /provider" },
+        skipLabeling: true,
+        lineage: { rootParentRequestId: "channel-run-root" },
       },
     }, { fetchImpl: neverInfer });
     assert.equal(control.control, true);
 
     const result = await runTurn({
       config,
-      messages: [user("Channel orchestration follow-on after the router delivered its receipt")],
+      messages: [user("# GrokRouter provider\n\nGROKROUTER_NATIVE_CONTROL: PROVIDER")],
       sessionOptions: {
         botId: "demo-bot",
-        grokBotRouterControlCandidate: { id: "message-1", text: "@Social Guru /provider" },
         skipLabeling: true,
         lineage: { rootParentRequestId: "channel-run-root" },
       },
@@ -1116,7 +1120,7 @@ test("a channel control suppresses host-shaped follow-on turns across Bots", asy
     assert.equal(result.text, "");
     assert.equal(result.alreadyDelivered, true);
     const audit = await readFile(join(root, "audit.jsonl"), "utf8");
-    assert.match(audit, /"reason":"channel-control-already-handled"/);
+    assert.match(audit, /"reason":"channel-control-follow-on"/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

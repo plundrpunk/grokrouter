@@ -1066,7 +1066,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             let description = frontmatter.split(whereSeparator: { $0.isNewline })
                 .first { $0.hasPrefix("description:") }
                 .map { String($0.dropFirst("description:".count)).trimmingCharacters(in: .whitespaces) } ?? ""
-            guard !description.isEmpty, body.contains("GROKROUTER_NATIVE_COMMAND: /\(name)") else {
+            guard !description.isEmpty, body.contains("GROKROUTER_NATIVE_CONTROL: \(name.uppercased())") else {
                 throw InstallerError.message("Native command /\(name) is missing its ownership marker.")
             }
             return ["name": name, "description": description, "body": body, "markdown": markdown]

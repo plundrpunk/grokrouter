@@ -11,6 +11,6 @@ metadata:
 
 # GrokRouter model catalog
 
-GROKROUTER_NATIVE_COMMAND: /models
+GROKROUTER_NATIVE_CONTROL: MODELS
 
 Use this only through its `/models` slash entry. Preserve the literal invocation and any model ID argument. GrokRouter intercepts the command before model inference and returns the authoritative catalog or switch receipt.

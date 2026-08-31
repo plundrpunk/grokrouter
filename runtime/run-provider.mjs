@@ -236,7 +236,7 @@ function controlProbe(messages) {
   };
 }
 
-const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_COMMAND:\s*(\/(?:providers?|models?|reasoning|router|doctor))(?:\s|$)/ig;
+const NATIVE_WORKFLOW_COMMAND_MARKER = /GROKROUTER_NATIVE_(?:COMMAND:\s*\/|CONTROL:\s*)(providers?|models?|reasoning|router|doctor)(?:\s|$)/ig;
 
 export function nativeWorkflowControlText(messages) {
   for (let index = (Array.isArray(messages) ? messages.length : 0) - 1; index >= 0; index -= 1) {
@@ -246,7 +246,7 @@ export function nativeWorkflowControlText(messages) {
     const raw = collectText(message?.content ?? message);
     const markers = [...raw.matchAll(NATIVE_WORKFLOW_COMMAND_MARKER)];
     if (markers.length === 0) return "";
-    const base = markers[markers.length - 1][1].toLowerCase();
+    const base = `/${markers[markers.length - 1][1].toLowerCase()}`;
     const commandName = base.slice(1);
     const visible = extractUserQuery(raw).trim();
     const selected = visible.match(new RegExp(`^/?${commandName}(?:\\s+([\\s\\S]+))?$`, "i"));
@@ -1658,16 +1658,12 @@ async function channelControlLatch(config) {
   }
 }
 
-async function rememberChannelControl(config, fingerprint = "") {
+async function rememberChannelControl(config) {
   try {
     const pathname = channelControlLatchPath(config);
-    const previous = await channelControlLatch(config);
     const now = Date.now();
-    const handled = Object.fromEntries(Object.entries(previous?.handled || {})
-      .filter(([, completedAt]) => now - Number(completedAt) < CHANNEL_CONTROL_LATCH_TTL_MS));
-    if (fingerprint) handled[fingerprint] = now;
     await mkdir(dirname(pathname), { recursive: true });
-    await writeFile(pathname, JSON.stringify({ completedAt: now, handled }), { mode: 0o600 });
+    await writeFile(pathname, JSON.stringify({ completedAt: now }), { mode: 0o600 });
   } catch {
     // A receipt latch improves channel hygiene but must never break a control.
   }
@@ -1677,24 +1673,6 @@ async function hasRecentChannelControl(config) {
   const value = await channelControlLatch(config);
   const completedAt = Number(value?.completedAt || 0);
   return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
-}
-
-async function hasHandledChannelControl(config, fingerprint) {
-  if (!fingerprint) return false;
-  const value = await channelControlLatch(config);
-  const completedAt = Number(value?.handled?.[fingerprint] || 0);
-  return completedAt > 0 && Date.now() - completedAt < CHANNEL_CONTROL_LATCH_TTL_MS;
-}
-
-function hostRouterControlCandidate(sessionOptions) {
-  const candidate = sessionOptions?.grokBotRouterControlCandidate;
-  const addressed = addressedRouterControlText(candidate?.text);
-  if (!ROUTER_CONTROL_PREFIX.test(addressed)) return null;
-  const id = typeof candidate.id === "string" ? candidate.id : "";
-  return {
-    text: addressed,
-    fingerprint: createHash("sha256").update(`${id}\0${candidate.text}`).digest("hex"),
-  };
 }
 
 function isChannelControlFollowOn(sessionOptions) {
@@ -1978,21 +1956,19 @@ export async function runTurn(input, dependencies = {}) {
       return suppressed("automation-continuation-already-claimed-or-processed");
     }
   }
-  const hostControl = hostRouterControlCandidate(sessionOptions);
   if (!automationContinuation
-      && hostControl
-      && await hasHandledChannelControl(config, hostControl.fingerprint)) {
-    return suppressed("channel-control-already-handled");
+      && isChannelControlFollowOn(sessionOptions)
+      && await hasRecentChannelControl(config)) {
+    return suppressed("channel-control-follow-on");
   }
   const controlText = nativeWorkflowControlText(messages)
-    || hostControl?.text
     || structuredRouterControlText(messages)
     || addressedRouterControlText(latestUserText(messages));
   const control = automationContinuation
     ? null
     : await controlResult(config, key, state, controlText);
   if (control) {
-    await rememberChannelControl(config, hostControl?.fingerprint);
+    await rememberChannelControl(config);
     await appendAudit(config, {
       event: "control_turn",
       sessionId: state.sessionId,
@@ -2002,11 +1978,6 @@ export async function runTurn(input, dependencies = {}) {
       model: state.model,
     });
     return { ok: true, ...control };
-  }
-  if (!automationContinuation
-      && isChannelControlFollowOn(sessionOptions)
-      && await hasRecentChannelControl(config)) {
-    return suppressed("channel-control-follow-on");
   }
   const completedTurnStillFresh = Number(state.completedTurnAt || 0) > 0
     && Date.now() - Number(state.completedTurnAt || 0) < COMPLETED_TURN_TTL_MS;

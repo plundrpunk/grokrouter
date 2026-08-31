@@ -11,6 +11,6 @@ metadata:
 
 # GrokRouter control plane
 
-GROKROUTER_NATIVE_COMMAND: /router
+GROKROUTER_NATIVE_CONTROL: ROUTER
 
 Use this only through its `/router` slash entry. Preserve the literal invocation and subcommand. GrokRouter intercepts the command before model inference and returns the authoritative result.
