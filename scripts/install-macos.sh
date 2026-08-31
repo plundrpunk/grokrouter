@@ -2,7 +2,7 @@
 set -euo pipefail
 
 REPOSITORY="promptadvisers/grokrouter"
-SOURCE_REF="source-v0.1.0-beta.39"
+SOURCE_REF="source-v0.1.0-beta.40"
 SOURCE_ROOT=""
 TEMP_SOURCE=""
 
@@ -57,7 +57,7 @@ fi
 [[ -d "/Applications/Grok Bot.app" ]] \
   || fail "install Grok Bot 0.30.0 in Applications first"
 
-printf 'Building GrokRouter locally from the public source...\n'
+printf 'Building GrokRouter locally from the version-pinned source...\n'
 ROUTER_BUILD_APP_ONLY=1 /bin/bash "$SOURCE_ROOT/scripts/build-macos-app.sh" >/dev/null
 
 USER_APPLICATIONS="${GROKROUTER_APPLICATIONS_DIR:-$HOME/Applications}"

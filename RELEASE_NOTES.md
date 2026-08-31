@@ -1,4 +1,16 @@
-# GrokRouter 0.1.0-beta.39
+# GrokRouter 0.1.0-beta.40 candidate
+
+Group routing, native control discovery, provider-aware delegation, and a Windows source preview for Grok Bot 0.30.0.
+
+- Router state now follows the stable Bot identity across direct chats and channels. Other channel members and changing conversation IDs cannot silently fork or overwrite that Bot's provider/model choice; earlier combined-ID state migrates on first use.
+- A pure leading Bot mention such as `@Research Bot /provider` is handled deterministically for the addressed Bot. Natural-language prose that merely mentions a command still reaches normal inference.
+- User-invocable skills publish `/provider`, `/models`, `/model`, `/reasoning`, `/router`, and `/doctor` through Grok's native slash discovery. Existing user skills win name conflicts, Doctor reports them, and uninstall removes only GrokRouter-owned links.
+- `/doctor` is a first-class alias for `/router doctor` and never reaches model inference.
+- Explicit OpenRouter delegation requests force a supplied orchestration tool or `GetDynamicTools`. When Grok supplies no actionable schemas, the router states that boundary instead of pretending a child started.
+- Restored the native Windows x64/Arm64 installer source, exact signed-app/version gate, sandboxed renderer, loopback/noVNC transport, restore path, cross-architecture packaging, checksum generation, and Windows CI. Native Windows setup and live acceptance remain pending, so this is a source preview rather than a public compatibility claim.
+- Automated coverage now spans group identity/isolation, addressed controls, slash-skill ownership, real-versus-invented delegation, Mac contracts, and Windows source/package contracts.
+
+## GrokRouter 0.1.0-beta.39
 
 Host-replacement recovery for Grok Bot 0.30.0.
 
@@ -112,4 +124,4 @@ The beta.2 foundation remains:
 - Full OpenRouter tool parity remains blocked on the current live host: the beta.32 Shell turn received zero actionable native tool schemas, so guarded recovery correctly refused to execute provider-printed pseudo Shell markup. Screenshot and returned-child claims remain outside the film-ready scope until the host supplies those schemas and the full gate passes.
 - The exact beta.38 artifact passed install, authoritative verified-stock restore, post-restore reinstall, a genuinely new Bot reporting beta.38, Luna persistence into the following normal inference, one `BETA38_FRESH_TEXT_OK` delivery, and second-Bot default isolation. ZIP SHA-256: `4a0f704c96a532d7000459fbf09090d33897e9cbace5c833bf0c4d67fe117235`.
 
-Known limitations: direct Anthropic SDK support is not included; Claude models are available through OpenRouter. Composer commands are intercepted by the router but do not appear in Grok Bot's native slash-suggestion menu.
+Known limitations: direct Anthropic SDK support is not included; Claude models are available through OpenRouter. Native slash entries remain subject to Grok skill discovery and name conflicts, while the literal composer controls remain available.

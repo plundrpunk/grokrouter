@@ -107,6 +107,10 @@ tar -xzf "$ARCHIVE" -C "$TEMPORARY"
 PAYLOAD="$TEMPORARY/grokbot-router-payload"
 (cd "$PAYLOAD" && shasum -a 256 -c SHA256SUMS >/dev/null)
 [[ "$(cat "$PAYLOAD/VERSION")" == "$(node -p "require('$PROJECT_ROOT/package.json').version")" ]]
+PAYLOAD_VERSION="$(cat "$PAYLOAD/VERSION")"
+grep -Fq "const ROUTER_VERSION = \"$PAYLOAD_VERSION\";" "$PAYLOAD/runtime/run-provider.mjs"
+grep -Fq "ROUTER_VERSION=\"$PAYLOAD_VERSION\"" "$PAYLOAD/remote/install.sh"
+grep -Fq "version: \"$PAYLOAD_VERSION\"" "$PAYLOAD/patch/router_patch.py"
 for skill_name in provider models model reasoning router doctor; do
   [[ -f "$PAYLOAD/skills/$skill_name/SKILL.md" ]]
   grep -q '^user-invocable: true$' "$PAYLOAD/skills/$skill_name/SKILL.md"

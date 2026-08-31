@@ -2,11 +2,11 @@
 
 This is an unofficial compatibility adapter. It modifies code inside a Grok Bot cloud computer and therefore deserves the same caution as any developer tool that can execute code and use a computer on your behalf.
 
-The official source is <https://github.com/promptadvisers/grokrouter>. The supported installer builds the native app locally from that source. GrokRouter does not ask users to bypass an unknown-developer warning for a downloaded binary.
+The official source is <https://github.com/promptadvisers/grokrouter>. The supported installer shells can be built locally from that source. GrokRouter does not ask users to bypass an unknown-developer or signature warning for a downloaded binary.
 
 ## What the installer can access
 
-The macOS installer validates `/Applications/Grok Bot.app`, restarts that app with an Electron diagnostic port bound only to `127.0.0.1`, and uses the local connection to operate the already-visible noVNC Bot computer. It does not request operating-system Accessibility, Screen Recording, or Full Disk Access permissions.
+The macOS installer validates `/Applications/Grok Bot.app`. The Windows installer locates the official app, requires Grok Bot 0.30.0, and requires a valid Authenticode signature before continuing. Each restarts Grok Bot with an Electron diagnostic port bound only to `127.0.0.1` and uses the local connection to operate the already-visible noVNC Bot computer. The Mac app does not request operating-system Accessibility, Screen Recording, or Full Disk Access permissions; the Windows renderer runs with context isolation, no Node integration, and the Electron sandbox enabled.
 
 Inside the Bot computer, the bootstrap can write under `/home/box/sand-data/grokbot-router`, back up and atomically replace `/home/box/sand-host/host-main.cjs`, run `npm ci`, restart the Grok host process, and invoke the installed Codex login flow.
 

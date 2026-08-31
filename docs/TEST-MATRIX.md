@@ -1,6 +1,6 @@
 # Verification matrix
 
-Research/build lock: 2026-08-30. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.39.
+Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.40.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |
@@ -9,13 +9,17 @@ Research/build lock: 2026-08-30. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.
 | Image/tool-result conversion | Unit test with PNG tool output | Codex called outer `Screenshot` and identified the Terminal window | Pass |
 | Codex structured outer-tool request | Fake SDK contract test | Same Codex thread called outer `Shell`, then `Read`, then returned the final response | Pass |
 | Per-Bot provider/model state isolation | Two-Bot state test plus merge-under-lock writes; stable Bot identity outranks changing turn request IDs | Beta.38 kept Luna across normal turns in the first new Bot; a second new Bot started on installer-default Claude | Pass on beta.38 |
+| Group chats preserve each Bot's router state | Tests cover direct-to-channel continuity, changing channel IDs and rosters, lazy combined-ID migration, per-Bot isolation, and pure addressed controls | Exact-candidate multi-Bot channel run pending | Automated pass; live pending |
 | Fresh-Bot forgiving model controls | Unit test proves exact, capitalized, whitespace, invalid-command, listed, and unlisted model inputs never reach inference | Beta.38 passed greeting, doctor, bare Luna switch, provider status, and a following normal inference in a genuinely new Bot after restore/reinstall | Pass on beta.38 |
 | Single delivery after visible assistant response | Unit tests block a second inference and remove tools from exact-text OpenRouter requests | Beta.38 returned one settled `BETA38_FRESH_TEXT_OK` reply with no markup or duplicate | Pass on beta.38 |
 | Routed model knows provider/model controls | OpenRouter request and Codex prompt contract tests | Beta.38 Luna returned `Provider=OpenRouter; Model=openai/gpt-5.6-luna` on the turn after the switch | Pass on beta.38 |
+| Native slash discovery | Payload/install tests verify six user-invocable skill descriptors, ownership-safe links, conflict reporting, and cleanup; runtime tests prove `/doctor` and group-addressed controls bypass inference | Exact-candidate native menu inspection pending | Automated pass; live pending |
 | Patch refuses unknown host | Python test | Version gate on the verified test app | Pass |
 | Patch is idempotent and reversible | Python install/doctor/restore test | Exact stock SHA-256 restored and verified repeatedly during clean-room cycles | Pass |
 | Full payload installs pinned SDK and management CLI | Synthetic end-to-end install | Fresh official Grok Bot 0.30.0 install completed with Codex CLI/SDK 0.151.0 | Pass |
 | Native Mac installer compiles for macOS 12+ | Swift typecheck/build/code-sign verification | UI inspected on the verified test Mac | Pass |
+| Native Windows installer preserves local-only and restore gates | Node source-contract suite, sandbox/CSP assertions, exact signed-app/version checks | Native Windows live cycle not yet run on this candidate | Automated pass; live pending |
+| Windows x64 and Arm64 application packaging | Cross-platform Electron packaging plus SHA-256 verification; Windows CI requires native Inno Setup outputs | Native Windows launch/install not yet run on this candidate | Source ZIP builds pass; setup/live pending |
 | Installer survives a Grok computer reconnect | Swift regression checks for chunked transfer and encoded output markers | Live reconnect occurred; installer retried and completed | Pass |
 | Installer reports success across host restart | Delayed-restart shell check; transport and encoded install-marker checks | Repeated reinstall exposed a redundant acknowledgement race; after removing it, the same live reinstall completed with `Installed with OpenRouter selected` and no false retry | Pass |
 | Verified stock restore and reinstall | Persistent stock-backup path, exact-hash/anchor gate, prompt reset, paced RFB transfer, stable VNC reuse, accurate OCR, and pre-restart restore sentinel assertions | Exact beta.38 installed, restored stock with an authoritative success receipt, reinstalled with OpenRouter selected, and passed a new-Bot doctor | Pass on beta.38 |
@@ -29,7 +33,7 @@ Research/build lock: 2026-08-30. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.
 | OpenRouter Claude text response | Mock HTTP test | `/router doctor` named `anthropic/claude-sonnet-4.6`; returned exactly `OPENROUTER_CLEAN_ROOM_OK` | Pass |
 | OpenRouter uses Grok Shell/Read | Function-call, permission-resume, captured textual-tool dialects, explicit-user-name/schema guards, required-first-round, named-function, and zero-host-schema regressions | On beta.32 the explicit Shell turn advertised zero actionable host tools. Guarded recovery correctly refused the model's printed pseudo-call; Grok never received Shell | Blocked on beta.32: host supplied no Shell schema |
 | OpenRouter uses Grok screenshot tool | Multimodal function-call test | Beta.10 Luna called outer `Screenshot` once and correctly described the visible desktop; beta.32 stopped at the preceding zero-host-schema Shell gate | Pass on beta.10 only; beta.32 not reverified |
-| OpenRouter uses Grok sub-agent tool | Generic schema bridge plus tagged-completion revival, receipt-ordering, replay, empty-result fallback, concurrent-claim, and printed-tool recovery regressions | Beta.10 reached repeated dynamic rounds but did not return the child; beta.32 stopped at the preceding zero-host-schema Shell gate | Failed on latest completed live path; beta.32 not reverified |
+| OpenRouter uses Grok sub-agent tool | Provider-aware tests force an offered orchestration tool or `GetDynamicTools`, refuse to invent a child when schemas are absent, and cover tagged-completion revival, receipt ordering, replay, fallback, and concurrent claims | Beta.10 reached repeated dynamic rounds but did not return the child; beta.32 stopped at the preceding zero-host-schema Shell gate | Automated behavior pass; latest live path still failed |
 
 Do not change a Pending row to Pass from code inspection alone. Capture the exact prompt, visible result, router audit event, and provider/model status for each live proof.
 

@@ -15,7 +15,11 @@ Do not frame this as an official integration. Say that it is a version-pinned, u
 - Complete every live row in `TEST-MATRIX.md` before stating tool/sub-agent parity as fact.
 - Install the exact artifact you will show, create the demo Bot only after that install, and leave the Shell permission/resume plus returned-child proof unedited. A passing older Bot is not evidence for the recording build.
 
-## Beta.38 recording decision
+## Beta.40 candidate decision
+
+Beta.40 is not yet film-ready. Its source suite and Mac/Windows package builds pass, but the exact candidate still needs the fresh-Bot menu, group-state, install → restore → reinstall, and capability gates below. Do not substitute beta.38's live evidence for beta.40.
+
+## Last live-verified recording decision: beta.38
 
 Beta.38 is ready for a scoped proof of the install and model-routing experience: exact installer, genuinely new Bot, normal greeting, `/router doctor`, `/models`, paste Luna, `/provider`, a normal model-identity reply, one exact-once text reply, second-Bot isolation, stock restore, and reinstall. Viewers build the app locally from the public source, so film the same README installation command they will use.
 
@@ -44,7 +48,7 @@ Do not animate the optional tool loop as a guaranteed beta.38 result. Present it
 
 For OpenRouter, the beta.38 scoped recording may repeat steps 3–4 with a fresh demo Bot: enter the key into the secure installer field, switch with `/provider openrouter`, and verify the named model plus one normal text response. Repeat the computer and sub-agent portions only after the live capability gate passes on the exact release artifact.
 
-The commands are deterministic composer controls, not entries in Grok Bot's native slash-suggestion menu. Type or paste them into the normal message box. Do not say or visually imply that `/models` appears in native slash autocomplete. Do not edit out the returned receipt, and confirm the text proof produces one response with no extra follow-up bubbles.
+The commands are deterministic composer controls with native slash-discovery descriptors. After the exact candidate passes the menu gate, show `/models` or `/doctor` being selected from Grok's `/` suggestions, then keep the returned deterministic receipt visible. Do not infer command correctness from the menu alone, and confirm the text proof produces one response with no extra follow-up bubbles.
 
 Before recording, run every step in [the fresh-Bot release gate](FRESH-BOT-ACCEPTANCE.md) against the exact candidate installer.
 

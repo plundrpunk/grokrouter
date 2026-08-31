@@ -12,14 +12,14 @@ This document is the implementation-level companion to [How it works, without th
 | Patched host executor | Decide stock versus routed path, sanitize the host payload, launch the router runtime and translate its result back into Grok's protocol | Provider implementation, long-term state or arbitrary tool execution |
 | Router runtime | Deterministic controls, stable Bot identity, provider/model state, replay protection, provider calls, transcript conversion and redacted audit | Grok's UI, permission decisions or the computer itself |
 | Codex SDK / OpenRouter | Model inference and provider-native thread state | Authority to invent a Grok tool that the host did not offer |
-| Native macOS installer shell | Exact compatibility checks, loopback/noVNC transport, checksummed install, provider setup, restore and cleanup | Grok account data or an unknown host build |
+| Native platform installer shells | Swift/AppKit on macOS and sandboxed Electron on Windows: exact compatibility checks, loopback/noVNC transport, checksummed install, provider setup, restore and cleanup | Grok account data or an unknown host build |
 
 ## Install and update flow
 
 1. The native installer verifies the supported Grok Bot app and exact version before opening a diagnostic session.
-2. Grok Bot is restarted with Electron diagnostics bound to Mac loopback only. The installer reuses an existing noVNC computer target when possible.
-3. Accurate Vision OCR and a harmless prompt probe establish that the Bot's Terminal is open and focused. Transfer stops if that cannot be proved.
-4. The installer types a small bootstrap through the connected noVNC RFB controller. Text is paced, every retry begins with Ctrl-C, and the archive plus every payload member has an expected SHA-256. macOS Vision OCR provides the terminal gate.
+2. Grok Bot is restarted with Electron diagnostics bound to `127.0.0.1` only. The installer reuses an existing noVNC computer target when possible.
+3. Accurate macOS Vision OCR or the pinned offline Windows Tesseract worker, plus a harmless prompt probe, establishes that the Bot's Terminal is open and focused. Transfer stops if that cannot be proved.
+4. The installer types a small bootstrap through the connected noVNC RFB controller. Text is paced, every retry begins with Ctrl-C, and the archive plus every payload member has an expected SHA-256.
 5. `remote/install.sh` stages pinned Node dependencies and the router payload inside the Bot computer.
 6. `patch/router_patch.py` verifies an allowlisted stock-host SHA-256 and every source anchor exactly once. It writes a persistent verified original under `/home/box/sand-data/grokbot-router-backup/`, syntax-checks the generated JavaScript and atomically activates it.
 7. The install script prints its authoritative sentinel before restarting the host. The platform app observes that terminal output, closes the diagnostic connection and relaunches Grok Bot normally.
@@ -30,7 +30,7 @@ An update follows the same path. Provider/model selections are preserved unless 
 
 ## Control turn
 
-The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. The payload also installs user-invocable skill descriptors under Grok's documented user skill root, which makes the five command families eligible for its native `/` suggestion menu. Those descriptors do not implement or authorize a control; the runtime remains the only command authority. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
+The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/doctor`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. The payload also installs user-invocable skill descriptors under Grok's documented user skill root, which makes the six command families eligible for its native `/` suggestion menu. Those descriptors do not implement or authorize a control; the runtime remains the only command authority. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
 
 The installer links only missing skill names or links already owned by the current GrokRouter installation. A pre-existing user skill wins, is never replaced, and is reported as a discovery conflict by Doctor. Removing GrokRouter removes only its own links. Command determinism comes from interception before inference, not from autocomplete registration. Invalid near-misses and unlisted bare model IDs also stop at the control plane instead of inviting a model to invent an answer.
 

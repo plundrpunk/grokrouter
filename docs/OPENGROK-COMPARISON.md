@@ -10,7 +10,7 @@ OpenGrok presents the user journey clearly: clone, run `python setup.py`, choose
 - a redacted `/router doctor` receipt;
 - exact host/version/hash gates that fail closed;
 - a visible fresh-Bot acceptance procedure that proves the installed artifact, not merely its endpoint;
-- deterministic model controls and an explicit statement that they are composer commands, not native slash-menu entries;
+- deterministic model controls plus user-invocable descriptors that make the real commands eligible for Grok's native slash menu;
 - rollback as a first-class user action.
 
 ## Why its smaller patch cannot be copied here
