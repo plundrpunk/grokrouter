@@ -15,6 +15,7 @@ Beginner-safe installer recovery for Grok Bot 0.30.0.
 - Cold stock restore waits up to 45 seconds for Grok Bot's shared workflow library before removing the six router commands.
 - Visible Prompt Advisers branding was removed from package metadata, skill metadata, provider headers, and installer publisher identity. The GitHub organization name remains only where the canonical repository URL is required.
 - Mac and Windows installer contracts cover the same structured failure and recovery behavior. Windows remains a source preview until native live acceptance passes.
+- Windows packaging pins Electron 41.10.3, clearing the high-severity sandbox-navigation advisory reported against the earlier build dependency.
 
 The exact macOS beta.44 lifecycle completed install → verified stock restore → reinstall. A final corrected-runtime reinstall recovered from a real Bot-computer target swap, registered all six commands, closed the diagnostic port, and passed fresh-Bot default isolation, model switching, deterministic near-miss controls, and exact-once normal replies.
 
