@@ -46,6 +46,14 @@ function buildResult(host, finalAssistantText, sentMessageCount) {
 
 
 class RouterPatchTests(unittest.TestCase):
+    def test_released_stock_hashes_keep_their_verified_byte_counts(self):
+        manifest = router_patch.load_manifest(PROJECT_ROOT / "patch" / "manifests" / "0.30.0.json")
+        pairs = {item["sha256"]: item["bytes"] for item in manifest["stockHosts"]}
+        self.assertEqual(
+            pairs["3364e421402302f8264f961637addb3997a817fde84a91b19635a0c28ff3941f"],
+            25656693,
+        )
+
     def test_default_stock_backup_survives_host_directory_replacement(self):
         self.assertEqual(
             router_patch.DEFAULT_BACKUP,
