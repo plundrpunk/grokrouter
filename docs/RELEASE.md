@@ -36,7 +36,7 @@ Rotating 0.30.0 host builds behind the same app version are different: they are 
 
 Grok may rotate the Bot-computer host while the Mac app still reports 0.30.0. Since structural verification landed, a signed registry entry is optional for such hosts; add one when you want a specific build recorded as reviewed, or when a host is rejected structurally but proves stock on inspection.
 
-1. Collect the complete safe report from beta.45. It must contain both SHA halves, byte count, cloud architecture, four anchor counts, and `PATCHDRYRUN=PASS`.
+1. Collect the complete safe report from beta.46. It must contain both SHA halves, byte count, cloud architecture, four anchor counts, and `PATCHDRYRUN=PASS`.
 2. Inspect the untouched stock host through the approved read-only process. Never ask a reporter to post proprietary host source.
 3. Add only the exact reviewed `{ "sha256", "bytes" }` pair to `compatibility/0.30.0-hosts.json`.
 4. Sign it from the repository root:
@@ -47,7 +47,7 @@ Grok may rotate the Bot-computer host while the Mac app still reports 0.30.0. Si
 
    The private Ed25519 key lives outside the workspace at `~/.config/grokrouter/release/host-registry-private.pem` by default. Never print, copy, or commit it.
 5. Run `npm test`, verify the signature and tamper-rejection tests, then complete the exact live repair and genuinely-new-Bot acceptance gate for that host before describing it as supported.
-6. Commit and publish the registry JSON and signature together. Existing beta.45 installations will verify the signature before accepting the new exact entry.
+6. Commit and publish the registry JSON and signature together. Existing beta.46 installations will verify the signature before accepting the new exact entry.
 
 Changing source anchors, the patch transformation, Grok Bot version, or signing key is not a registry-only update. It requires a new installer release and the full release gate.
 

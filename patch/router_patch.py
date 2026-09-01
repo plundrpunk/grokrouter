@@ -115,7 +115,7 @@ function appendGrokBotRouterHostError(config, error) {
     const auditPath = config?.auditPath || "/home/box/sand-data/grokbot-router/audit.jsonl";
     require("node:fs").appendFileSync(auditPath, `${JSON.stringify({
       timestamp: new Date().toISOString(),
-      version: "0.1.0-beta.45",
+      version: "0.1.0-beta.46",
       event: "host_bridge_error",
       diagnostic
     })}\n`, { encoding: "utf8", mode: 0o600 });

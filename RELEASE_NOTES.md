@@ -1,4 +1,4 @@
-# Unreleased
+# GrokRouter 0.1.0-beta.46
 
 Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.
 
