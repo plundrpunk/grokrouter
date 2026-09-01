@@ -30,6 +30,32 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: install_source
+    attributes:
+      label: Installation source
+      description: Old forks and downloaded copies can contain an earlier router even when this README is current.
+      options:
+        - Pinned beta.44 Terminal command from the official README
+        - ZIP downloaded from the official repository
+        - Fork, clone, old ZIP, or another source
+        - I do not know
+    validations:
+      required: true
+
+  - type: dropdown
+    id: literal_provider_result
+    attributes:
+      label: Result after manually typing /provider
+      description: Type the complete /provider command in a genuinely new Bot. Do not rely on the slash-suggestion menu.
+      options:
+        - It named Codex SDK or OpenRouter and a model
+        - It produced an ordinary AI answer
+        - It was ignored or produced no answer
+        - I could not complete this check
+    validations:
+      required: true
+
   - type: textarea
     id: safe_diagnostics
     attributes:

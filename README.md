@@ -106,7 +106,12 @@ The installer has finished when its log shows a line beginning with `✓ Install
 
 ### 4. Prove it works in a brand-new Bot
 
-Create a **new Bot after installation**. In that Bot's normal chat box, send these one at a time:
+Create a **new Bot after installation**. Do not use an old Bot as the first test.
+
+> [!IMPORTANT]
+> Do not wait for `/provider` to appear in Grok Bot's slash-suggestion menu. That menu is only a shortcut and can be stale. Click the normal chat box, type the complete command `/provider` yourself, and press Return.
+
+In the new Bot's normal chat box, type and send these one at a time:
 
 ```text
 /router doctor
@@ -125,6 +130,8 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 
 | What you see | What to do |
 | --- | --- |
+| `/provider` is missing from the slash menu | Type the complete `/provider` command manually and press Return. Then follow [the missing-command checklist](#provider-is-missing-from-the-slash-menu). |
+| You installed from a fork, old clone, or old ZIP | Do not troubleshoot that copy. Run the pinned beta.44 command in [Step 2](#2-install-and-open-grokrouter) so the installer is built from the exact official tag. |
 | Apple Command Line Tools are required | Finish Apple's installation, then repeat whichever installation path you used. |
 | macOS will not open the command | Control-click **Install GrokRouter.command**, choose **Open**, then confirm **Open**. Do not disable Gatekeeper. |
 | `install Grok Bot 0.30.0 in Applications first` | Put the official app at `/Applications/Grok Bot.app`, open it once, then retry. |
@@ -138,6 +145,32 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
 
 If Doctor still reports a failure, copy its complete non-secret output into an [installation support issue](https://github.com/promptadvisers/grokrouter/issues/new?template=installation-failure.yml) or give it to your AI assistant. Never post an API key.
+
+### `/provider` is missing from the slash menu
+
+This is the most common setup misunderstanding. **The slash menu is not the test.** GrokRouter handles the literal command before model inference, so `/provider` can work even when Grok Bot has not refreshed its suggestion menu.
+
+Follow these steps in order. Stop as soon as a step passes.
+
+1. **Type it manually.** Click the Bot's normal message box, type exactly `/provider`, and press Return. Do not select a suggestion and do not ask the Bot in natural language.
+2. **Read the result.** If the reply names `Codex SDK` or `OpenRouter` and a model, routing works. You can keep typing the commands manually; the missing suggestion is only a discovery-menu problem.
+3. **Make sure the test Bot is new.** Create a genuinely new Bot **after** the latest installation, then manually send `/router doctor` followed by `/provider`.
+4. **Replace stale source.** If you installed from a fork, old clone, bookmark, or previously downloaded ZIP, use the pinned beta.44 Terminal command from [Step 2](#2-install-and-open-grokrouter). It downloads the exact official tag into a new temporary folder; it does not depend on your old checkout.
+5. **Reinstall with the Bot computer visible.** Open Grok Bot 0.30.0, select any Bot, click **Open computer**, and leave it open. Open GrokRouter, choose the provider, and click **Install Router**. Follow any large **Action needed** instruction. Do not close either app.
+6. **Wait for both receipts.** The activity log must show a line beginning with `✓ Installed`. It should also say that it verified six unique GrokRouter commands. A spinning indicator, an ordinary Grok reply, or a missing slash suggestion is not an installation receipt.
+7. **Retry the supported way.** If installation stops, use **Try installation again**. If Doctor reports a damaged or replaced host, use **Repair Router**, wait for success, and repeat the new-Bot test.
+8. **Check for a command-name conflict.** GrokRouter does not overwrite a user-created skill with the same name. If Doctor reports a conflict for `provider`, `models`, `model`, `reasoning`, `router`, or `doctor`, rename or remove only that conflicting user-created skill, reinstall, and test again. Never delete Grok Bot files by hand.
+9. **Collect safe evidence.** Click **Copy safe diagnostics** and save the complete report. It excludes credentials, conversations, and private Bot files. Never paste an API key, Codex device code, password, conversation, or private file into an issue or AI chat.
+
+After a repair or reinstall, fully quit and reopen Grok Bot only after GrokRouter finishes. Create another new Bot and manually run:
+
+```text
+/router doctor
+/provider
+/models
+```
+
+The setup passes when Doctor begins with `Router 0.1.0-beta.44: OK`, `/provider` names the selected provider and model, `/models` returns the packaged list, and a normal message receives one normal response.
 
 ## Everyday commands
 
@@ -154,19 +187,90 @@ Type these into a Bot's normal Grok chat box:
 
 Each Bot keeps its own provider and model choice.
 
-## Give this repository to your AI assistant
+## Fastest recovery: let Codex test the apps for you
 
-Paste this prompt into Codex, Claude Code, or another coding assistant that can read the repository:
+Use the Codex desktop app on the same Mac as Grok Bot. Give Codex the official repository folder, allow Computer Use when Codex or macOS asks, and paste the prompt below. If Computer Use is unavailable, Codex can still inspect the repository, run safe Terminal checks, and tell you the one UI action it cannot perform.
+
+This prompt authorizes a persistent but bounded troubleshooting loop. It does **not** authorize bypassing compatibility checks, exposing secrets, deleting user data, or modifying Grok Bot by hand.
 
 ```text
-Help me install and verify GrokRouter from this repository. Read README.md and
-AGENTS.md first. Walk me through one step at a time in plain English. Before
-changing anything, confirm that this is an Apple-silicon Mac on macOS 12 or
-later and that /Applications/Grok Bot.app is exactly version 0.30.0. Never
-bypass an unsupported-version, hash, signature, or source-anchor check. Use the
-documented installer and recovery paths only. After installation, help me create
-a brand-new Bot and verify /router doctor and /provider. If anything fails,
-explain the exact failure without exposing API keys or other secrets.
+Own the complete GrokRouter troubleshooting loop on this Mac. Do not stop after
+giving me generic instructions. Read README.md and AGENTS.md first, inspect the
+current installation, use the documented recovery actions, and keep testing
+until the acceptance checks below pass or you identify one real external
+blocker that only I can resolve.
+
+Official source: https://github.com/promptadvisers/grokrouter
+Required source tag: source-v0.1.0-beta.44
+Supported target: Apple-silicon macOS 12 or later with the official app at
+/Applications/Grok Bot.app, exactly version 0.30.0.
+
+AUTHORIZATION
+- You may use safe read-only Terminal checks and the repository's documented
+  installer, Doctor, Repair, retry, and verification paths.
+- If Computer Use is available, use it to operate the visible GrokRouter and
+  Grok Bot apps, move between them, open a Bot computer, create a genuinely new
+  Bot, type the literal test commands, and inspect the visible results.
+- Assume yes to safe, reversible troubleshooting actions inside these two apps
+  and the official repository. Keep going without asking me to repeat clicks
+  you can perform yourself.
+- Ask me only for an operating-system permission, account sign-in, or secret
+  entry that you cannot complete. Never read, print, copy, or expose my API key,
+  Codex device code, password, conversations, or private Bot files.
+
+SAFETY BOUNDARIES
+- Never bypass or weaken a version, hash, code-signature, source-anchor, or
+  compatibility check.
+- Never type installer shell commands into Grok Bot's chat composer. Use only
+  the official installer and the visible Bot-computer flow it controls.
+- Do not delete Grok Bot files, disable Gatekeeper, use sudo, overwrite my
+  existing repository, or modify source code merely to make a check pass.
+- If my checkout is a fork or stale clone, leave it untouched and use the
+  pinned official beta.44 installer command from README.md.
+
+TROUBLESHOOTING LOOP
+1. Confirm the Mac architecture, macOS version, Grok Bot path, exact Grok Bot
+   version, and current GrokRouter source/version. Stop on an unsupported app.
+2. Remember that the slash-suggestion menu is not authoritative. Manually type
+   /provider in the normal composer. Record whether it returns a deterministic
+   provider/model receipt, reaches ordinary model inference, or is ignored.
+3. If the current install is stale or unhealthy, use the pinned official
+   beta.44 source installer from README.md. Open Grok Bot, select any Bot, open
+   its computer, run GrokRouter's Install Router action, and respond to any
+   Action needed state. Wait for the authoritative installed receipt and the
+   message verifying six unique GrokRouter commands.
+4. If a recoverable phase fails, use Try installation again. If Doctor reports
+   a damaged or replaced host, use Repair Router. Use Copy safe diagnostics and
+   inspect only the redacted report when you need evidence.
+5. After every successful install or repair, create a genuinely new Bot. Type
+   these literal commands manually, one at a time:
+   /router doctor
+   /provider
+   /models
+6. Use Computer Use to inspect the slash menu too. If the literal commands work
+   but a suggestion is absent, report that as a discovery-menu problem, check
+   Doctor for a conflicting user skill, restart only after the installer has
+   finished, and retest. Do not call the whole router broken merely because the
+   suggestion menu is stale.
+7. Send one ordinary exact-text test and make sure it produces one response,
+   not zero and not duplicates. Create a second new Bot and verify it starts on
+   the installer default rather than inheriting the first Bot's model choice.
+8. Repeat the safe install/repair/new-Bot loop until all acceptance checks pass
+   or a genuine external blocker remains.
+
+ACCEPTANCE CHECKS
+- /router doctor begins with: Router 0.1.0-beta.44: OK
+- /provider names the provider and model selected in GrokRouter.
+- /models returns the packaged model list.
+- A normal exact-text request returns exactly one settled answer.
+- A second new Bot starts with the installer default provider/model.
+- Any remaining missing slash suggestion is clearly identified as menu
+  discovery only, with the literal-command workaround confirmed.
+
+At the end, give me a short evidence table showing each check as PASS, FAIL, or
+BLOCKED, the exact visible evidence, every recovery action you took, and the
+single next action for any blocker. Do not claim success from code inspection;
+prove it in a genuinely new Bot created after the final install or repair.
 ```
 
 ---
@@ -195,7 +299,7 @@ For the friendly explanation, read [How it works](docs/HOW-IT-WORKS.md). For imp
 
 | Platform | Current evidence |
 | --- | --- |
-| macOS 12+, Apple silicon | The exact beta.39 app installed successfully and a genuinely new Bot passed Doctor and provider selection. The preceding beta.38 candidate passed install → restore → reinstall. |
+| macOS 12+, Apple silicon | The exact beta.44 lifecycle passed install → verified stock restore → reinstall. A genuinely new Bot then passed Doctor, model switching, provider identity, exact-once delivery, slash-control near misses, and second-Bot state isolation. |
 | Windows 11, x64 and Arm64 | Native Electron installer, exact signed-app/version gate, loopback/noVNC transport, restore path, packaging tests, and both ZIP and Inno Setup architectures build on the Windows CI runner. Native launch/install and live Grok Bot acceptance remain required before a public Windows claim. |
 
 The detailed claim ledger lives in the [test matrix](docs/TEST-MATRIX.md). macOS is the live-verified platform; Windows is a source preview until its native acceptance cycle passes.
