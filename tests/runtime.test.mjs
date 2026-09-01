@@ -1433,7 +1433,7 @@ test("a visible assistant delivery stops duplicate fresh-Bot inference", async (
   }
 });
 
-test("a persisted per-Bot completion starts only after a real delivery receipt", async () => {
+test("a completed provider result suppresses host replays before a delivery receipt", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokbot-router-persisted-delivery-"));
   const previous = process.env.OPENROUTER_API_KEY;
   process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
@@ -1459,16 +1459,10 @@ test("a persisted per-Bot completion starts only after a real delivery receipt",
     assert.equal(first.text, "OpenRouter test model");
 
     const beforeReceipt = await runTurn({ config, messages, sessionOptions: { botId: "fresh-bot" } }, {
-      fetchImpl: async () => {
-        requests += 1;
-        return new Response(JSON.stringify({
-          model: "openai/test-model",
-          choices: [{ message: { content: "OpenRouter test model before receipt", tool_calls: [] } }],
-          usage: { prompt_tokens: 3, completion_tokens: 4 },
-        }), { status: 200 });
-      },
+      fetchImpl: async () => { requests += 1; throw new Error("duplicate inference"); },
     });
-    assert.equal(beforeReceipt.text, "OpenRouter test model before receipt");
+    assert.equal(beforeReceipt.alreadyDelivered, true);
+    assert.equal(beforeReceipt.text, "");
 
     const delivered = await runTurn({
       config,
@@ -1503,6 +1497,91 @@ test("a persisted per-Bot completion starts only after a real delivery receipt",
     });
     assert.equal(cleanup.alreadyDelivered, true);
     assert.equal(cleanup.text, "");
+    assert.equal(requests, 1);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("concurrent host replays of one user turn run provider inference exactly once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-user-turn-concurrent-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  let releaseRequest;
+  let markStarted;
+  const requestStarted = new Promise((resolve) => { markStarted = resolve; });
+  const requestRelease = new Promise((resolve) => { releaseRequest = resolve; });
+  const config = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+  };
+  const input = {
+    config,
+    messages: [user("What provider and model are you using?")],
+    sessionOptions: { botId: "concurrent-user-turn-bot" },
+  };
+  try {
+    const fetchImpl = async () => {
+      requests += 1;
+      markStarted();
+      await requestRelease;
+      return new Response(JSON.stringify({
+        model: "openai/test-model",
+        choices: [{ message: { content: "ONE RESPONSE", tool_calls: [] } }],
+        usage: {},
+      }), { status: 200 });
+    };
+    const first = runTurn(input, { fetchImpl });
+    await requestStarted;
+    const second = runTurn(input, { fetchImpl });
+    releaseRequest();
+    const results = await Promise.all([first, second]);
+    assert.equal(requests, 1);
+    assert.equal(results.filter((result) => result.text === "ONE RESPONSE").length, 1);
+    assert.equal(results.filter((result) => result.alreadyDelivered).length, 1);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a failed provider attempt releases its user-turn claim for retry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-user-turn-retry-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  const config = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+  };
+  const input = {
+    config,
+    messages: [user("Retry after a provider failure")],
+    sessionOptions: { botId: "failed-user-turn-bot" },
+  };
+  try {
+    await assert.rejects(() => runTurn(input, {
+      fetchImpl: async () => { requests += 1; throw new Error("network down"); },
+    }), /network down/);
+    const retried = await runTurn(input, {
+      fetchImpl: async () => {
+        requests += 1;
+        return new Response(JSON.stringify({
+          model: "openai/test-model",
+          choices: [{ message: { content: "RECOVERED", tool_calls: [] } }],
+          usage: {},
+        }), { status: 200 });
+      },
+    });
+    assert.equal(retried.text, "RECOVERED");
     assert.equal(requests, 2);
   } finally {
     if (previous === undefined) delete process.env.OPENROUTER_API_KEY;

@@ -67,7 +67,7 @@ final class CDPClient {
         return value["result"] as? [String: Any] ?? [:]
     }
 
-    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil) async throws -> [String: Any] {
+    private func callUnbounded(_ method: String, params: [String: Any], sessionID: String?) async throws -> [String: Any] {
         if let sessionID {
             return try await callNested(method, params: params, sessionID: sessionID)
         }
@@ -77,6 +77,25 @@ final class CDPClient {
             let value = try await receiveObject()
             guard (value["id"] as? Int) == requestID else { continue }
             return try result(from: value)
+        }
+    }
+
+    func call(_ method: String, params: [String: Any] = [:], sessionID: String? = nil) async throws -> [String: Any] {
+        let timeout = DispatchWorkItem { [weak self] in
+            // Closing the socket unblocks URLSessionWebSocketTask.receive even
+            // when Swift task cancellation alone does not. A retry then opens
+            // a brand-new diagnostic client instead of inheriting the stall.
+            self?.task.cancel(with: .goingAway, reason: nil)
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 12, execute: timeout)
+        defer { timeout.cancel() }
+        do {
+            return try await callUnbounded(method, params: params, sessionID: sessionID)
+        } catch {
+            if task.closeCode == .goingAway {
+                throw InstallerError.message("Grok Bot's local diagnostic connection stopped responding. Open a Bot computer and try again.")
+            }
+            throw error
         }
     }
 
@@ -125,6 +144,7 @@ struct TargetInfo {
 }
 
 struct AttachedTarget {
+    let client: CDPClient
     let targetID: String
     let sessionID: String
 }
@@ -482,7 +502,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             ("PREFLIGHT", "Step 3 of 6 · Checking the Bot computer…", "The Bot computer is missing a required tool or has an unsupported runtime."),
             ("VALIDATEPAYLOAD", "Step 3 of 6 · Verifying the installer files…", "The installer files did not pass their integrity check."),
             ("PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."),
-            ("INSTALLDEPENDENCIES", "Step 4 of 6 · Downloading pinned dependencies…", "The Bot computer could not download the pinned dependencies. Check its internet connection, then try again."),
+            ("INSTALLDEPENDENCIES", "Step 4 of 6 · Preparing pinned dependencies…", "The Bot computer could not prepare the pinned dependencies. On a first Codex install, check its internet connection, then try again."),
             ("ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."),
             ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."),
             ("VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."),
@@ -829,7 +849,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         appendLog("Waiting for a Bot computer. If Grok Bot does not open it automatically, select any Bot and click Open computer…")
         for index in 0..<360 {
             if let vnc = try await targets(client).first(where: { $0.type == "webview" && $0.url.contains("/vnc.html") }) {
-                return AttachedTarget(targetID: vnc.id, sessionID: try await attach(client, targetID: vnc.id))
+                return AttachedTarget(client: client, targetID: vnc.id, sessionID: try await attach(client, targetID: vnc.id))
             }
             // Reuse an already open computer. Clicking first can replace the
             // valid webview between installer phases and manufacture a retry.
@@ -1069,11 +1089,20 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         var lastError: Error?
         for attempt in 1...3 {
             do {
-                let vnc = try await waitForVNC(client, pageSession: pageSession)
-                try await ensureTerminal(client, vncSession: vnc.sessionID)
-                try await resetRemotePrompt(client, vncSession: vnc.sessionID)
+                let attemptClient: CDPClient
+                let attemptPageSession: String
+                if attempt == 1 {
+                    attemptClient = client
+                    attemptPageSession = pageSession
+                } else {
+                    attemptClient = CDPClient(url: try await browserWebSocketURL())
+                    attemptPageSession = try await mainPageSession(attemptClient)
+                }
+                let vnc = try await waitForVNC(attemptClient, pageSession: attemptPageSession)
+                try await ensureTerminal(attemptClient, vncSession: vnc.sessionID)
+                try await resetRemotePrompt(attemptClient, vncSession: vnc.sessionID)
                 for command in commands {
-                    try await typeRemoteCommand(command, client: client, vncSession: vnc.sessionID)
+                    try await typeRemoteCommand(command, client: attemptClient, vncSession: vnc.sessionID)
                     try await Task.sleep(nanoseconds: 150_000_000)
                 }
                 // Every command reached the verified terminal session. The
@@ -1327,8 +1356,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             pageSession: pageSession
         )
         appendLog("Connected to the Bot computer without Accessibility permissions.")
-        try await waitForSentinel("GROKBOT_ROUTER_TRANSPORT_OK", client: client, vnc: transportVNC, timeoutSeconds: 30)
+        try await waitForSentinel("GROKBOT_ROUTER_TRANSPORT_OK", client: transportVNC.client, vnc: transportVNC, timeoutSeconds: 30)
         appendLog("Terminal transport verified.")
+        // A second nested session on the same Electron webview can stop
+        // receiving DevTools responses. Release the probe attachment before
+        // opening the payload-transfer attachment.
+        _ = try? await transportVNC.client.call("Target.detachFromTarget", params: ["sessionId": transportVNC.sessionID])
 
         let archive = try Data(contentsOf: archiveURL())
         let encoded = archive.base64EncodedString()
@@ -1364,15 +1397,18 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         appendLog("Installing pinned dependencies and applying the reversible host adapter…")
         try await waitForSentinel(
             "GROKBOT_ROUTER_INSTALL_OK",
-            client: client,
+            client: installVNC.client,
             vnc: installVNC,
             timeoutSeconds: 360,
             installAttempt: installAttempt
         )
+        _ = try? await installVNC.client.call("Target.detachFromTarget", params: ["sessionId": installVNC.sessionID])
         appendLog("The Bot computer reported a successful install.")
         appendLog("Registering native slash commands through Grok Bot's workflow service…")
-        try await updateNativeWorkflows(client, pageSession: pageSession)
-        _ = try? await evaluate(client, sessionID: pageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
+        let workflowClient = CDPClient(url: try await browserWebSocketURL())
+        let workflowPageSession = try await mainPageSession(workflowClient)
+        try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
+        _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         if defaultProvider == "openrouter" {
             return "Installed with OpenRouter selected. Send /router doctor in Grok Bot."
         }
@@ -1396,14 +1432,17 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
         if nativeWorkflowOperation == "remove" {
+            appendLog("Waiting for Grok Bot's shared command library before stock restore…")
             try await updateNativeWorkflows(client, pageSession: pageSession, operation: "remove")
         }
         let vnc = try await typeRemoteCommandsResilient([command], client: client, pageSession: pageSession)
         if let confirmationSentinel {
-            try await waitForSentinel(confirmationSentinel, client: client, vnc: vnc, timeoutSeconds: 45)
+            try await waitForSentinel(confirmationSentinel, client: vnc.client, vnc: vnc, timeoutSeconds: 45)
         }
         if nativeWorkflowOperation == "sync" {
-            try await updateNativeWorkflows(client, pageSession: pageSession)
+            let workflowClient = CDPClient(url: try await browserWebSocketURL())
+            let workflowPageSession = try await mainPageSession(workflowClient)
+            try await updateNativeWorkflows(workflowClient, pageSession: workflowPageSession)
         }
     }
 }

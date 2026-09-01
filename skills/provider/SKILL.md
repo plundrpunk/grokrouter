@@ -5,7 +5,7 @@ argument-hint: "[codex|openrouter]"
 user-invocable: true
 disable-model-invocation: true
 metadata:
-  author: Prompt Advisers
+  author: GrokRouter
   short-description: Show or switch this Bot's provider
 ---
 

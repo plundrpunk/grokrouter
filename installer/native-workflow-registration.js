@@ -2,6 +2,11 @@
   const definitions = __GROKROUTER_NATIVE_SKILLS__;
   const operation = __GROKROUTER_NATIVE_OPERATION__;
   const markers = ["GROKROUTER_NATIVE_CONTROL:", "GROKROUTER_NATIVE_COMMAND:"];
+  // Grok can restore the last conversation and its account-scoped workflow
+  // library on different schedules. A cold diagnostic launch routinely needs
+  // more than the old 12-second window even though the library becomes ready
+  // moments later.
+  const workflowReadyTimeoutMs = 45_000;
   const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
   const withTimeout = (promise, milliseconds, label) => Promise.race([
     promise,
@@ -95,7 +100,10 @@
         unsubscribe();
         callback();
       };
-      const timer = setTimeout(() => finish(() => reject(new Error("workflow snapshot unavailable"))), 12_000);
+      const timer = setTimeout(
+        () => finish(() => reject(new Error("workflow snapshot unavailable"))),
+        workflowReadyTimeoutMs,
+      );
       unsubscribe = store.subscribe(() => {
         const snapshot = store.get();
         const workflows = workflowValue(snapshot);

@@ -4,7 +4,7 @@ description: Check GrokRouter runtime, provider, credential, and tool-bridge hea
 user-invocable: true
 disable-model-invocation: true
 metadata:
-  author: Prompt Advisers
+  author: GrokRouter
   short-description: Check GrokRouter health
 ---
 

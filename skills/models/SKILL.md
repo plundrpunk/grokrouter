@@ -5,7 +5,7 @@ argument-hint: "[vendor/model]"
 user-invocable: true
 disable-model-invocation: true
 metadata:
-  author: Prompt Advisers
+  author: GrokRouter
   short-description: List models or switch this Bot
 ---
 

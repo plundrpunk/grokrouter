@@ -9,7 +9,14 @@ Beginner-safe installer recovery for Grok Bot 0.30.0.
 - Waiting for a Bot computer now becomes an explicit **Action needed** state after ten seconds.
 - Remote terminal state is cleared before each operation so an earlier error cannot poison a later retry.
 - Pinned npm downloads use bounded retries and timeouts so temporary registry failures can recover without hanging indefinitely.
+- Reinstall retries reuse an already verified same-platform Codex runtime, while OpenRouter-only setup skips the Codex dependency download entirely.
+- Mac diagnostic calls close a non-responsive socket after 12 seconds. Transfer retries open a fresh DevTools client, so a replaced Bot-computer webview cannot leave the installer spinning forever.
+- Ordinary user turns are claimed atomically before provider inference. Concurrent host replays now produce one provider request and one visible answer; failed provider attempts release the claim so a real retry can proceed.
+- Cold stock restore waits up to 45 seconds for Grok Bot's shared workflow library before removing the six router commands.
+- Visible Prompt Advisers branding was removed from package metadata, skill metadata, provider headers, and installer publisher identity. The GitHub organization name remains only where the canonical repository URL is required.
 - Mac and Windows installer contracts cover the same structured failure and recovery behavior. Windows remains a source preview until native live acceptance passes.
+
+The exact macOS beta.44 lifecycle completed install → verified stock restore → reinstall. A final corrected-runtime reinstall recovered from a real Bot-computer target swap, registered all six commands, closed the diagnostic port, and passed fresh-Bot default isolation, model switching, deterministic near-miss controls, and exact-once normal replies.
 
 Existing installations must rebuild GrokRouter from current source and click **Install Router**. If Codex is enabled, complete **Codex sign-in** afterward.
 

@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { Codex } from "@openai/codex-sdk";
 
 const runtimeDirectory = dirname(fileURLToPath(import.meta.url));
 const MAX_INPUT_BYTES = 50 * 1024 * 1024;
@@ -11,6 +10,7 @@ const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
 const ROUTER_VERSION = "0.1.0-beta.44";
 const COMPLETED_TURN_TTL_MS = 15 * 60_000;
+const ACTIVE_TURN_TTL_MS = 15 * 60_000;
 const CHANNEL_CONTROL_LATCH_TTL_MS = 30_000;
 const INTERNAL_DELIVERY_TOOLS = new Set([
   "sendtouser",
@@ -1091,8 +1091,7 @@ export async function runOpenRouter(config, messages, tools, fetchImpl = fetch) 
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://promptadvisers.com/grokbot-router",
-        "X-Title": "Prompt Advisers GrokRouter",
+        "X-Title": "GrokRouter",
       },
       body: JSON.stringify(requestBody),
       signal: AbortSignal.timeout(Number(config.timeoutMs || 15 * 60_000)),
@@ -1321,8 +1320,16 @@ function codexThreadOptions(config) {
   };
 }
 
-export async function runCodex(config, messages, tools, codexFactory = () => new Codex()) {
-  const codex = codexFactory();
+async function createCodexClient(config) {
+  const { Codex } = await import("@openai/codex-sdk");
+  return new Codex(config.codexPathOverride ? { codexPathOverride: config.codexPathOverride } : {});
+}
+
+export async function runCodex(config, messages, tools, codexFactory = null) {
+  // OpenRouter-only installations do not need to load or install the Codex
+  // SDK. Keep it behind the Codex execution path so the simplest setup has no
+  // remote npm download at all.
+  const codex = codexFactory ? codexFactory() : await createCodexClient(config);
   const options = codexThreadOptions(config);
   let resuming = Boolean(config.codexThreadId);
   let thread = resuming
@@ -2019,6 +2026,27 @@ export async function runTurn(input, dependencies = {}) {
       && completedTurnStillFresh) {
     return suppressed("completed-turn-fingerprint");
   }
+  let turnClaimed = false;
+  if (!automationContinuation && turnFingerprint) {
+    const now = Date.now();
+    const updated = await mutateState(config, key, state, (current) => {
+      const completedStillFresh = current.completedTurnFingerprint === turnFingerprint
+        && Number(current.completedTurnAt || 0) > 0
+        && now - Number(current.completedTurnAt || 0) < COMPLETED_TURN_TTL_MS;
+      const activeStillFresh = current.activeTurnFingerprint === turnFingerprint
+        && Number(current.activeTurnClaimedAt || 0) > 0
+        && now - Number(current.activeTurnClaimedAt || 0) < ACTIVE_TURN_TTL_MS;
+      if (completedStillFresh || activeStillFresh) return current;
+      turnClaimed = true;
+      return {
+        ...current,
+        activeTurnFingerprint: turnFingerprint,
+        activeTurnClaimedAt: now,
+      };
+    });
+    Object.assign(state, updated);
+    if (!turnClaimed) return suppressed("user-turn-already-claimed-or-completed");
+  }
   const toolsFromHost = actionableTools(tools);
   if (toolsFromHost.length) {
     state.tools = toolsFromHost;
@@ -2081,6 +2109,11 @@ export async function runTurn(input, dependencies = {}) {
     }
     result.toolCalls = rewriteHostToolCallIds(result.toolCalls);
   } catch (error) {
+    if (turnClaimed) {
+      await mutateState(config, key, state, (current) => current.activeTurnFingerprint === turnFingerprint
+        ? { ...current, activeTurnFingerprint: null, activeTurnClaimedAt: null }
+        : current).catch(() => {});
+    }
     if (continuationClaimed) {
       await mutateState(config, key, state, (current) => {
         const claims = { ...(current.automationContinuationClaims || {}) };
@@ -2115,6 +2148,22 @@ export async function runTurn(input, dependencies = {}) {
             : []),
           continuationSignature,
         ].slice(-64),
+      };
+    });
+    Object.assign(state, updated);
+  }
+  if (turnClaimed) {
+    const completed = Boolean(result.text) && !(result.toolCalls || []).length;
+    const updated = await mutateState(config, key, state, (current) => {
+      if (current.activeTurnFingerprint !== turnFingerprint) return current;
+      return {
+        ...current,
+        activeTurnFingerprint: null,
+        activeTurnClaimedAt: null,
+        ...(completed ? {
+          completedTurnFingerprint: turnFingerprint,
+          completedTurnAt: Date.now(),
+        } : {}),
       };
     });
     Object.assign(state, updated);

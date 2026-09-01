@@ -66,6 +66,10 @@ test("Windows installer registers native commands through Grok's workflow servic
   assert.match(build, /grokrouter-native-skills/);
 });
 
+test("Windows restore explains delayed native command cleanup", () => {
+  assert.match(main, /Waiting for Grok Bot's shared command library before stock restore/);
+});
+
 test("Windows renderer is isolated from Node and never stores the OpenRouter key", () => {
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /nodeIntegration: false/);

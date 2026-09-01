@@ -384,9 +384,9 @@ Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritati
 
 ## Release truth
 
-Beta.39 fixed the lifecycle case where Grok replaced the live host while leaving the router runtime and config installed. It adds an exact-gated watchdog, explicit Repair action, bounded JPEG installer screenshots, and the redesigned GrokRouter Mac app.
+Beta.44 makes setup failures recoverable instead of leaving the installer spinning: numbered phases, a clear action-needed state, bounded diagnostic and network operations, one-click retry, safe diagnostics, fresh diagnostic sessions after a Bot-computer swap, verified dependency reuse, and an OpenRouter-only path with no Codex download.
 
-The exact local macOS beta.39 artifact reinstalled successfully and a genuinely new Bot passed `/router doctor` and `/provider`. The restored Windows x64 and Arm64 applications build and checksum successfully from current source, but have not yet passed a native Windows install → restore → reinstall → fresh-Bot cycle. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
+The exact local macOS beta.44 lifecycle completed install → verified stock restore → reinstall. A genuinely new Bot passed Doctor, model switching, provider identity, deterministic near-miss controls, exact-once text delivery, and second-Bot state isolation. The Windows x64 and Arm64 applications build and checksum successfully from current source, but have not yet passed a native Windows install → restore → reinstall → fresh-Bot cycle. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
 
 See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and the dated [Independent Review](docs/INDEPENDENT-REVIEW-2026-08-29.md) for the evidence behind every claim.
 

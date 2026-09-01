@@ -1,6 +1,6 @@
 # License
 
-Copyright 2026 Prompt Advisers. All rights reserved.
+Copyright 2026 Mark Kashef. All rights reserved.
 
 Permission is granted to individuals to view, copy, modify, build, and use this
 source code for personal, non-commercial purposes. You may make a private custom
@@ -8,7 +8,7 @@ build for your own computer.
 
 The source code, custom builds, and official builds may not be redistributed,
 sublicensed, sold, published, or incorporated into another product without
-written permission from Prompt Advisers. Link to the official repository
+written permission from the copyright holder. Link to the official repository
 instead.
 
 GrokRouter is provided as-is, without warranty. Use it only with the exact Grok

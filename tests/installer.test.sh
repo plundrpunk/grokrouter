@@ -29,6 +29,10 @@ grep -q 'GROKROUTER_PREF123_INSTALL_FAILED_PREFLIGHT_MISSING_COMMAND' <<<"$PREFL
   "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 
 grep -q 'typeRemoteCommandsResilient' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'let timeout = DispatchWorkItem' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'task.cancel(with: .goingAway' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'local diagnostic connection stopped responding' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+[[ "$(grep -c 'Target.detachFromTarget' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift")" -eq 2 ]]
 grep -q 'Reuse an already open computer' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'let transportVNC = try await typeRemoteCommandsResilient' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'ensureTerminal' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -79,6 +83,7 @@ grep -q 'app.workflows.remove' "$PROJECT_ROOT/installer/native-workflow-registra
 grep -q 'agent.id === selectedAgentId' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'waitForSelectedAgentId' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'selection can be superseded' "$PROJECT_ROOT/installer/native-workflow-registration.js"
+grep -q 'workflowReadyTimeoutMs = 45_000' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'remove duplicate' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'withRetries' "$PROJECT_ROOT/installer/native-workflow-registration.js"
 grep -q 'stats.unchanged' "$PROJECT_ROOT/installer/native-workflow-registration.js"
@@ -121,6 +126,14 @@ grep -q 'GROKROUTER_%s_PHASE_%s' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'GROKROUTER_%s_INSTALL_FAILED_%s_%s' "$PROJECT_ROOT/remote/install.sh"
 grep -q -- '--fetch-retries=3' "$PROJECT_ROOT/remote/install.sh"
 grep -q -- '--fetch-timeout=30000' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'Reusing the already verified pinned Codex runtime' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'OpenRouter-only setup needs no dependency download' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'await import("@openai/codex-sdk")' "$PROJECT_ROOT/runtime/run-provider.mjs"
+grep -q '"X-Title": "GrokRouter"' "$PROJECT_ROOT/runtime/run-provider.mjs"
+! grep -q 'Prompt Advisers\|promptadvisers.com' "$PROJECT_ROOT/runtime/run-provider.mjs"
+grep -q '<string>io.grokrouter.installer</string>' "$PROJECT_ROOT/installer/Info.plist"
+grep -q 'Copyright 2026 Mark Kashef' "$PROJECT_ROOT/LICENSE.md"
+! grep -q 'Prompt Advisers' "$PROJECT_ROOT/LICENSE.md" "$PROJECT_ROOT/runtime/package.json" "$PROJECT_ROOT/runtime/package-lock.json" "$PROJECT_ROOT/installer-windows/package.json" "$PROJECT_ROOT/scripts/build-windows-setup.ps1" "$PROJECT_ROOT"/skills/*/SKILL.md
 [[ -f "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml" ]]
 grep -q 'Emit the restore sentinel before the delayed host restart' "$PROJECT_ROOT/remote/grokbot-router"
 grep -q 'sleep 3; pkill -f' "$PROJECT_ROOT/remote/grokbot-router"
@@ -232,8 +245,10 @@ ROUTER_BIN_DIR="$TEST_BIN" \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$TEST_RUNTIME" \
+  --providers codex,openrouter \
   --no-restart \
-  >/dev/null
+  >"$TEMPORARY/install-reuse.log"
+grep -q 'Reusing the already verified pinned Codex runtime' "$TEMPORARY/install-reuse.log"
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"

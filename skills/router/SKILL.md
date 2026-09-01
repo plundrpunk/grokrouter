@@ -5,7 +5,7 @@ argument-hint: "[status|help|doctor|reset]"
 user-invocable: true
 disable-model-invocation: true
 metadata:
-  author: Prompt Advisers
+  author: GrokRouter
   short-description: GrokRouter status, help, Doctor, or reset
 ---
 

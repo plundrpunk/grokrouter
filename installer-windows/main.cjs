@@ -50,7 +50,7 @@ const INSTALL_PHASES = Object.freeze([
   ["PREFLIGHT", "Step 3 of 6 · Checking the Bot computer…", "The Bot computer is missing a required tool or has an unsupported runtime."],
   ["VALIDATEPAYLOAD", "Step 3 of 6 · Verifying the installer files…", "The installer files did not pass their integrity check."],
   ["PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."],
-  ["INSTALLDEPENDENCIES", "Step 4 of 6 · Downloading pinned dependencies…", "The Bot computer could not download the pinned dependencies. Check its internet connection, then try again."],
+  ["INSTALLDEPENDENCIES", "Step 4 of 6 · Preparing pinned dependencies…", "The Bot computer could not prepare the pinned dependencies. On a first Codex install, check its internet connection, then try again."],
   ["ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."],
   ["APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."],
   ["VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."],
@@ -675,7 +675,10 @@ async function sendRemoteAction(executable, action) {
   try {
     const pageSession = await mainPageSession(client);
     const descriptor = REMOTE_ACTIONS[action];
-    if (action === "uninstall") await updateNativeWorkflows(client, pageSession, "remove");
+    if (action === "uninstall") {
+      log("Waiting for Grok Bot's shared command library before stock restore…");
+      await updateNativeWorkflows(client, pageSession, "remove");
+    }
     const vnc = await typeRemoteCommandsResilient([descriptor.command], client, pageSession);
     await waitForSentinel(descriptor.sentinel, client, vnc, 45);
     if (action === "repair") await updateNativeWorkflows(client, pageSession);

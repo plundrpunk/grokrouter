@@ -15,13 +15,9 @@ Do not frame this as an official integration. Say that it is a version-pinned, u
 - Complete every live row in `TEST-MATRIX.md` before stating tool/sub-agent parity as fact.
 - Install the exact artifact you will show, create the demo Bot only after that install, and leave the Shell permission/resume plus returned-child proof unedited. A passing older Bot is not evidence for the recording build.
 
-## Beta.40 candidate decision
+## Current recording decision: beta.44
 
-Beta.40 is not yet film-ready. Its source suite and Mac/Windows package builds pass, but the exact candidate still needs the fresh-Bot menu, group-state, install → restore → reinstall, and capability gates below. Do not substitute beta.38's live evidence for beta.40.
-
-## Last live-verified recording decision: beta.38
-
-Beta.38 is ready for a scoped proof of the install and model-routing experience: exact installer, genuinely new Bot, normal greeting, `/router doctor`, `/models`, paste Luna, `/provider`, a normal model-identity reply, one exact-once text reply, second-Bot isolation, stock restore, and reinstall. Viewers build the app locally from the public source, so film the same README installation command they will use.
+Beta.44 is ready for a scoped proof of the Mac install, recovery, and model-routing experience: exact installer, verified stock restore and reinstall, one-click recovery after a real Bot-computer target swap, `/router doctor`, `/models`, paste Luna, `/provider`, a normal model-identity reply, one exact-once text reply, and second-Bot isolation. Viewers build the app locally from the public source, so film the same README installation command they will use.
 
 Do not currently film or narrate OpenRouter Shell, Screenshot, or sub-agent parity as working in this candidate. The latest explicit Shell turn received zero actionable host schemas; the adapter failed safely instead of executing model-authored pseudo-tool markup. Add those scenes only after the same release artifact passes every capability row unedited.
 

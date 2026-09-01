@@ -243,16 +243,42 @@ CODEX_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["
 OPENROUTER_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["openRouterModel"])' "$STAGE_ROOT/provider.json")"
 
 emit_phase "INSTALL_DEPENDENCIES"
-printf '[3/6] Installing pinned Codex SDK dependencies\n'
-(cd "$STAGE_ROOT" && npm ci \
-  --omit=dev \
-  --ignore-scripts \
-  --no-audit \
-  --no-fund \
-  --fetch-retries=3 \
-  --fetch-retry-mintimeout=1000 \
-  --fetch-retry-maxtimeout=10000 \
-  --fetch-timeout=30000)
+if [[ "$ENABLED_PROVIDERS" == *codex* ]]; then
+  dependencies_reused=0
+  codex_native_package=""
+  case "$(node -p 'process.platform + "-" + process.arch')" in
+    linux-x64) codex_native_package="codex-linux-x64" ;;
+    linux-arm64) codex_native_package="codex-linux-arm64" ;;
+    darwin-x64) codex_native_package="codex-darwin-x64" ;;
+    darwin-arm64) codex_native_package="codex-darwin-arm64" ;;
+    win32-x64) codex_native_package="codex-win32-x64" ;;
+    win32-arm64) codex_native_package="codex-win32-arm64" ;;
+  esac
+  if [[ -f "$INSTALL_ROOT/package-lock.json" ]] \
+    && cmp -s "$STAGE_ROOT/package-lock.json" "$INSTALL_ROOT/package-lock.json" \
+    && [[ -f "$INSTALL_ROOT/node_modules/@openai/codex-sdk/dist/index.js" ]] \
+    && [[ -x "$INSTALL_ROOT/node_modules/.bin/codex" ]] \
+    && [[ -n "$codex_native_package" ]] \
+    && [[ -d "$INSTALL_ROOT/node_modules/@openai/$codex_native_package" ]]; then
+    printf '[3/6] Reusing the already verified pinned Codex runtime\n'
+    cp -a "$INSTALL_ROOT/node_modules" "$STAGE_ROOT/node_modules"
+    dependencies_reused=1
+  fi
+  if [[ "$dependencies_reused" == "0" ]]; then
+    printf '[3/6] Downloading the pinned Codex runtime (first install only)\n'
+    (cd "$STAGE_ROOT" && npm ci \
+      --omit=dev \
+      --ignore-scripts \
+      --no-audit \
+      --no-fund \
+      --fetch-retries=3 \
+      --fetch-retry-mintimeout=1000 \
+      --fetch-retry-maxtimeout=10000 \
+      --fetch-timeout=30000)
+  fi
+else
+  printf '[3/6] OpenRouter-only setup needs no dependency download\n'
+fi
 
 emit_phase "ACTIVATE_RUNTIME"
 printf '[4/6] Activating runtime atomically\n'

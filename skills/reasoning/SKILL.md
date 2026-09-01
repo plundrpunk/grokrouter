@@ -5,7 +5,7 @@ argument-hint: "[minimal|low|medium|high|xhigh]"
 user-invocable: true
 disable-model-invocation: true
 metadata:
-  author: Prompt Advisers
+  author: GrokRouter
   short-description: Change this Bot's reasoning effort
 ---
 

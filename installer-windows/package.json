@@ -4,7 +4,7 @@
   "private": true,
   "description": "Native Windows delivery shell for GrokRouter",
   "main": "main.cjs",
-  "author": "Prompt Advisers",
+  "author": "GrokRouter",
   "license": "UNLICENSED",
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",

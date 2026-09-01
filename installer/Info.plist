@@ -11,7 +11,7 @@
   <key>CFBundleExecutable</key>
   <string>GrokBotRouterInstaller</string>
   <key>CFBundleIdentifier</key>
-  <string>com.promptadvisers.grokrouter</string>
+  <string>io.grokrouter.installer</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
