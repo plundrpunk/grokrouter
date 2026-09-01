@@ -26,11 +26,11 @@ The native macOS installer—and the source-preview Windows shell built around t
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.
-5. Inside the Bot computer, it installs pinned runtime dependencies, verifies the exact stock host hash and source anchors, and saves the stock host under persistent `sand-data` storage.
+5. Inside the Bot computer, it installs pinned runtime dependencies, verifies the exact stock host hash, byte count and source anchors, and saves the stock host under persistent `sand-data` storage. If Grok has rotated to another 0.30.0 stock build, beta.45 checks one signed compatibility registry before refusing it.
 6. It injects one narrow executor into the known host. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
 7. It restarts the Grok host, verifies a real success marker, closes the diagnostic connection and reopens Grok Bot normally.
 
-If the app version, host hash, source anchors, payload checksum, Terminal focus or generated code does not match expectations, installation stops rather than guessing.
+If the app version, host hash-and-size pair, registry signature, source anchors, payload checksum, Terminal focus or generated code does not match expectations, installation stops rather than guessing. An unknown host produces a safe fingerprint and a read-only syntax result; Grok host source is never uploaded.
 
 ## What happens when you send a message
 

@@ -30,6 +30,25 @@ If Xcode Command Line Tools are missing, macOS opens Apple's installer. The view
 
 If Grok Bot updates, refusal is the expected behavior. Do not edit a version string or hash merely to get past the gate. Inspect the untouched stock host, add an exact reviewed manifest, run every automated check, and repeat the complete live gate before claiming support.
 
+## Updating the 0.30.0 signed host registry
+
+Grok may rotate the Bot-computer host while the Mac app still reports 0.30.0. Beta.45 separates the bundled source-seam rules from the signed list of exact stock hash-and-byte-count pairs.
+
+1. Collect the complete safe report from beta.45. It must contain both SHA halves, byte count, cloud architecture, four anchor counts, and `PATCHDRYRUN=PASS`.
+2. Inspect the untouched stock host through the approved read-only process. Never ask a reporter to post proprietary host source.
+3. Add only the exact reviewed `{ "sha256", "bytes" }` pair to `compatibility/0.30.0-hosts.json`.
+4. Sign it from the repository root:
+
+   ```bash
+   node scripts/sign-host-registry.mjs
+   ```
+
+   The private Ed25519 key lives outside the workspace at `~/.config/grokrouter/release/host-registry-private.pem` by default. Never print, copy, or commit it.
+5. Run `npm test`, verify the signature and tamper-rejection tests, then complete the exact live repair and genuinely-new-Bot acceptance gate for that host before describing it as supported.
+6. Commit and publish the registry JSON and signature together. Existing beta.45 installations will verify the signature before accepting the new exact entry.
+
+Changing source anchors, the patch transformation, Grok Bot version, or signing key is not a registry-only update. It requires a new installer release and the full release gate.
+
 ## Optional signed distribution later
 
 A signed and notarized ZIP can be added later without changing the source installer. That is a separate release path and requires a Developer ID Application certificate, notarization credentials, checksum verification, Gatekeeper acceptance, and a fresh-machine live gate. Until those conditions are met, do not publish an unsigned downloadable app or ask viewers to bypass Gatekeeper.

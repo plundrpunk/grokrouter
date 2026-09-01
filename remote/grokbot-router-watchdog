@@ -13,10 +13,34 @@ INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
 MANIFEST="$INSTALL_ROOT/patch/manifests/0.30.0.json"
+HOST_REGISTRY_TOOL="$INSTALL_ROOT/bin/host-registry"
 HOST="${ROUTER_PATCH_HOST:-/home/box/sand-host/host-main.cjs}"
 BACKUP="${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
 LOCK_DIR="/home/box/sand-data/grokbot-router-watchdog.lock"
 LOG_PATH="/home/box/sand-data/grokbot-router-watchdog-events.log"
+
+ACTIVE_REGISTRY=""
+set_registry_args() {
+  ACTIVE_REGISTRY=""
+  if [[ -x "$HOST_REGISTRY_TOOL" ]] && registry_path="$("$HOST_REGISTRY_TOOL" verify 2>/dev/null)"; then
+    ACTIVE_REGISTRY="$registry_path"
+  fi
+}
+set_registry_args
+run_patch_doctor() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$PATCHER" --doctor --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --host-registry "$ACTIVE_REGISTRY" --json
+  else
+    python3 "$PATCHER" --doctor --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json
+  fi
+}
+run_patch_install() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$PATCHER" --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --host-registry "$ACTIVE_REGISTRY" --json
+  else
+    python3 "$PATCHER" --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json
+  fi
+}
 
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
   exit 0
@@ -43,16 +67,24 @@ PY
 
 repair_count=0
 repair_window_start="$(date +%s)"
+last_registry_refresh=0
 while true; do
   sleep 5
   auto_repair_enabled || continue
-  if python3 "$PATCHER" --doctor --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json >/dev/null 2>&1; then
+  if run_patch_doctor >/dev/null 2>&1; then
     repair_count=0
     repair_window_start="$(date +%s)"
     continue
   fi
 
   now="$(date +%s)"
+  if (( now - last_registry_refresh > 3600 )) && [[ -x "$HOST_REGISTRY_TOOL" ]]; then
+    if "$HOST_REGISTRY_TOOL" refresh >/dev/null 2>&1; then
+      set_registry_args
+      log_event "signed-compatibility-registry-refreshed"
+    fi
+    last_registry_refresh="$now"
+  fi
   if (( now - repair_window_start > 300 )); then
     repair_count=0
     repair_window_start="$now"
@@ -65,7 +97,7 @@ while true; do
     continue
   fi
 
-  if python3 "$PATCHER" --host "$HOST" --backup "$BACKUP" --manifest "$MANIFEST" --json >/dev/null 2>&1; then
+  if run_patch_install >/dev/null 2>&1; then
     repair_count=$((repair_count + 1))
     log_event "known-stock-host-repaired"
     pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true

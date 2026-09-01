@@ -504,14 +504,14 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             ("PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."),
             ("INSTALLDEPENDENCIES", "Step 4 of 6 · Preparing pinned dependencies…", "The Bot computer could not prepare the pinned dependencies. On a first Codex install, check its internet connection, then try again."),
             ("ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."),
-            ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."),
+            ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "This Bot computer uses a new stock host variant. GrokRouter checked for a signed compatibility update and changed nothing."),
             ("VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."),
             ("COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly.")
         ]
     }
 
     private func redactedDiagnosticExcerpt(_ text: String) -> String {
-        let interestingWords = ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER"]
+        let interestingWords = ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER", "HOSTSHA", "HOSTBYTES", "CLOUDARCH", "ANCHORS", "SUPPORTEDVERSION"]
         let selected = text
             .split(whereSeparator: { $0.isNewline })
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }

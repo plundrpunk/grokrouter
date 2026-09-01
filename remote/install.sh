@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROUTER_VERSION="0.1.0-beta.44"
+ROUTER_VERSION="0.1.0-beta.45"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
@@ -147,8 +147,13 @@ for required in \
   "$PAYLOAD_ROOT/runtime/provider.default.json" \
   "$PAYLOAD_ROOT/patch/router_patch.py" \
   "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" \
+  "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json" \
+  "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json.sig" \
+  "$PAYLOAD_ROOT/compatibility/registry-public-key.pem" \
   "$PAYLOAD_ROOT/remote/grokbot-router" \
-  "$PAYLOAD_ROOT/remote/grokbot-router-watchdog"; do
+  "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" \
+  "$PAYLOAD_ROOT/remote/host-registry" \
+  "$PAYLOAD_ROOT/remote/verify-host-registry.mjs"; do
   if [[ ! -f "$required" ]]; then
     fail_install "INCOMPLETE_PAYLOAD" "payload is incomplete: $required"
   fi
@@ -165,13 +170,18 @@ cp "$PAYLOAD_ROOT/runtime/run-provider.mjs" "$STAGE_ROOT/run-provider.mjs"
 cp "$PAYLOAD_ROOT/runtime/package.json" "$STAGE_ROOT/package.json"
 cp "$PAYLOAD_ROOT/runtime/package-lock.json" "$STAGE_ROOT/package-lock.json"
 cp "$PAYLOAD_ROOT/runtime/provider.default.json" "$STAGE_ROOT/provider.json"
-mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin" "$STAGE_ROOT/skills"
+mkdir -p "$STAGE_ROOT/patch/manifests" "$STAGE_ROOT/bin" "$STAGE_ROOT/skills" "$STAGE_ROOT/compatibility"
 cp "$PAYLOAD_ROOT/patch/router_patch.py" "$STAGE_ROOT/patch/router_patch.py"
 cp "$PAYLOAD_ROOT/patch/manifests/0.30.0.json" "$STAGE_ROOT/patch/manifests/0.30.0.json"
+cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json" "$STAGE_ROOT/compatibility/0.30.0-hosts.json"
+cp "$PAYLOAD_ROOT/compatibility/0.30.0-hosts.json.sig" "$STAGE_ROOT/compatibility/0.30.0-hosts.json.sig"
+cp "$PAYLOAD_ROOT/compatibility/registry-public-key.pem" "$STAGE_ROOT/compatibility/registry-public-key.pem"
 cp "$PAYLOAD_ROOT/remote/grokbot-router" "$STAGE_ROOT/bin/grokbot-router"
 cp "$PAYLOAD_ROOT/remote/grokbot-router-watchdog" "$STAGE_ROOT/bin/grokbot-router-watchdog"
+cp "$PAYLOAD_ROOT/remote/host-registry" "$STAGE_ROOT/bin/host-registry"
+cp "$PAYLOAD_ROOT/remote/verify-host-registry.mjs" "$STAGE_ROOT/bin/verify-host-registry.mjs"
 cp -R "$PAYLOAD_ROOT/skills/." "$STAGE_ROOT/skills/"
-chmod 700 "$STAGE_ROOT/bin/grokbot-router" "$STAGE_ROOT/bin/grokbot-router-watchdog" "$STAGE_ROOT/patch/router_patch.py"
+chmod 700 "$STAGE_ROOT/bin/grokbot-router" "$STAGE_ROOT/bin/grokbot-router-watchdog" "$STAGE_ROOT/bin/host-registry" "$STAGE_ROOT/bin/verify-host-registry.mjs" "$STAGE_ROOT/patch/router_patch.py"
 
 if [[ -f "$INSTALL_ROOT/provider.json" ]]; then
   cp "$INSTALL_ROOT/provider.json" "$STAGE_ROOT/provider.json"
@@ -312,10 +322,29 @@ PATCH_ARGS=(
 if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
   PATCH_ARGS+=(--allow-unknown-host)
 fi
-if ! python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"; then
-  rollback_runtime
-  fail_install "ADAPTER_REJECTED" "host adapter failed; the previous runtime was restored"
+ACTIVE_REGISTRY=""
+if CACHED_REGISTRY="$("$INSTALL_ROOT/bin/host-registry" verify 2>/dev/null || true)" && [[ -n "$CACHED_REGISTRY" ]]; then
+  ACTIVE_REGISTRY="$CACHED_REGISTRY"
 fi
+run_adapter_patch() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}" --host-registry "$ACTIVE_REGISTRY"
+  else
+    python3 "$INSTALL_ROOT/patch/router_patch.py" "${PATCH_ARGS[@]}"
+  fi
+}
+if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
+  printf 'The bundled compatibility list did not recognize this Bot computer. Checking for a signed update…\n'
+  if UPDATED_REGISTRY="$("$INSTALL_ROOT/bin/host-registry" refresh 2>/dev/null || true)" && [[ -n "$UPDATED_REGISTRY" ]]; then
+    ACTIVE_REGISTRY="$UPDATED_REGISTRY"
+  fi
+  if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
+    printf '%s\n' "$ADAPTER_OUTPUT" >&2
+    rollback_runtime
+    fail_install "NEW_STOCK_HOST" "This Bot computer needs a reviewed compatibility entry. Nothing was patched. Copy safe diagnostics; the complete host fingerprint is included."
+  fi
+fi
+printf '%s\n' "$ADAPTER_OUTPUT"
 
 # Beta.40 incorrectly treated loose ~/.grok/skills links as native slash-menu
 # registration. Grok 0.30.0 actually reads a per-Bot workflow store. The
@@ -346,7 +375,11 @@ fi
 emit_phase "VERIFY_INSTALL"
 printf '[6/6] Final verification\n'
 node --check "$INSTALL_ROOT/run-provider.mjs"
-python3 "$INSTALL_ROOT/patch/router_patch.py" --doctor "${PATCH_ARGS[@]}"
+if [[ -n "$ACTIVE_REGISTRY" ]]; then
+  python3 "$INSTALL_ROOT/patch/router_patch.py" --doctor "${PATCH_ARGS[@]}" --host-registry "$ACTIVE_REGISTRY"
+else
+  python3 "$INSTALL_ROOT/patch/router_patch.py" --doctor "${PATCH_ARGS[@]}"
+fi
 
 # Grok can replace the live host when it provisions a different Bot computer.
 # Keep the exact-hash/anchor gates authoritative and repair only a known stock

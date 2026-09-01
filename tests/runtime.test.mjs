@@ -1310,7 +1310,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.44: OK/);
+    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.45: OK/);
     assert.equal(nativeDoctor.control, true);
 
     const nativeProvider = await runTurn({

@@ -7,12 +7,32 @@ bash -n \
   "$PROJECT_ROOT/remote/install.sh" \
   "$PROJECT_ROOT/remote/grokbot-router" \
   "$PROJECT_ROOT/remote/grokbot-router-watchdog" \
+  "$PROJECT_ROOT/remote/host-registry" \
   "$PROJECT_ROOT/scripts/build-payload.sh" \
   "$PROJECT_ROOT/scripts/build-macos-app.sh" \
   "$PROJECT_ROOT/scripts/install-macos.sh" \
   "$PROJECT_ROOT/Install GrokRouter.command"
 python3 -m py_compile "$PROJECT_ROOT/patch/router_patch.py"
 node --check "$PROJECT_ROOT/runtime/run-provider.mjs"
+node --check "$PROJECT_ROOT/remote/verify-host-registry.mjs"
+node --check "$PROJECT_ROOT/scripts/sign-host-registry.mjs"
+node "$PROJECT_ROOT/remote/verify-host-registry.mjs" \
+  "$PROJECT_ROOT/compatibility/0.30.0-hosts.json" \
+  "$PROJECT_ROOT/compatibility/0.30.0-hosts.json.sig" \
+  "$PROJECT_ROOT/compatibility/registry-public-key.pem" \
+  >/dev/null
+TAMPERED_REGISTRY="$(mktemp -t grokrouter-tampered-registry.XXXXXX)"
+cp "$PROJECT_ROOT/compatibility/0.30.0-hosts.json" "$TAMPERED_REGISTRY"
+printf ' ' >> "$TAMPERED_REGISTRY"
+if node "$PROJECT_ROOT/remote/verify-host-registry.mjs" \
+  "$TAMPERED_REGISTRY" \
+  "$PROJECT_ROOT/compatibility/0.30.0-hosts.json.sig" \
+  "$PROJECT_ROOT/compatibility/registry-public-key.pem" \
+  >/dev/null 2>&1; then
+  echo "Tampered compatibility registry must be rejected" >&2
+  exit 1
+fi
+rm -f "$TAMPERED_REGISTRY"
 
 STRUCTURED_FAILURE="$(ROUTER_INSTALL_ATTEMPT=TEST1234 bash "$PROJECT_ROOT/remote/install.sh" --not-a-real-option 2>&1 || true)"
 grep -q 'GROKROUTER_TEST1234_INSTALL_FAILED_OPTIONS_UNKNOWN_OPTION' <<<"$STRUCTURED_FAILURE"
@@ -67,6 +87,9 @@ grep -q 'installPayload.*base64EncodedString' "$PROJECT_ROOT/installer/GrokBotRo
 grep -q 'installAttempt: installAttempt' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'HOSTSHA1=' "$PROJECT_ROOT/patch/router_patch.py"
+grep -q 'signed-compatibility-registry-refreshed' "$PROJECT_ROOT/remote/grokbot-router-watchdog"
 grep -q 'Try installation again' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Open support issue' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'installation-failure.yml' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -109,15 +132,15 @@ grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'GROKROUTER_APPLICATIONS_DIR' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'GROKROUTER_NO_OPEN' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'xcode-select --install' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'SOURCE_REF="source-v0.1.0-beta.44"' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'source-v0.1.0-beta.44/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
+grep -q 'SOURCE_REF="source-v0.1.0-beta.45"' "$PROJECT_ROOT/scripts/install-macos.sh"
+grep -q 'source-v0.1.0-beta.45/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
 grep -Fq 'The slash menu is not the test.' "$PROJECT_ROOT/README.md"
 grep -Fq 'Fastest recovery: let Codex test the apps for you' "$PROJECT_ROOT/README.md"
 grep -Fq 'If Computer Use is available' "$PROJECT_ROOT/README.md"
 grep -Fq 'prove it in a genuinely new Bot created after the final install or repair' "$PROJECT_ROOT/README.md"
 grep -Fq 'The version is correct, but the host adapter is not patched' "$PROJECT_ROOT/README.md"
 grep -Fq 'Paste this prompt into Codex on your Mac—never into Grok Bot.' "$PROJECT_ROOT/README.md"
-grep -Fq 'A displayed beta.44 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
+grep -Fq 'A displayed beta.45 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
 grep -Fq 'id: install_source' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: literal_provider_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: host_adapter_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
@@ -167,6 +190,11 @@ trap cleanup EXIT
 tar -xzf "$ARCHIVE" -C "$TEMPORARY"
 PAYLOAD="$TEMPORARY/grokbot-router-payload"
 (cd "$PAYLOAD" && shasum -a 256 -c SHA256SUMS >/dev/null)
+[[ -f "$PAYLOAD/compatibility/0.30.0-hosts.json" ]]
+[[ -f "$PAYLOAD/compatibility/0.30.0-hosts.json.sig" ]]
+[[ -f "$PAYLOAD/compatibility/registry-public-key.pem" ]]
+[[ -x "$PAYLOAD/remote/host-registry" ]]
+[[ -x "$PAYLOAD/remote/verify-host-registry.mjs" ]]
 [[ "$(cat "$PAYLOAD/VERSION")" == "$(node -p "require('$PROJECT_ROOT/package.json').version")" ]]
 PAYLOAD_VERSION="$(cat "$PAYLOAD/VERSION")"
 grep -Fq "const ROUTER_VERSION = \"$PAYLOAD_VERSION\";" "$PAYLOAD/runtime/run-provider.mjs"
@@ -193,7 +221,7 @@ ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_ALLOW_UNKNOWN_HOST=1 \
 ROUTER_BIN_DIR="$TEST_BIN" \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
-ROUTER_INSTALL_ATTEMPT=SUCCESS44 \
+ROUTER_INSTALL_ATTEMPT=SUCCESS45 \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$TEST_RUNTIME" \
   --provider codex \
@@ -202,7 +230,7 @@ bash "$PAYLOAD/remote/install.sh" \
   >"$TEMPORARY/install-success.log"
 
 for phase in PREFLIGHT VALIDATE_PAYLOAD PREPARE_RUNTIME INSTALL_DEPENDENCIES ACTIVATE_RUNTIME APPLY_ADAPTER VERIFY_INSTALL COMPLETE; do
-  grep -q "GROKROUTER_SUCCESS44_PHASE_$phase" "$TEMPORARY/install-success.log"
+  grep -q "GROKROUTER_SUCCESS45_PHASE_$phase" "$TEMPORARY/install-success.log"
 done
 
 grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
@@ -211,6 +239,18 @@ grep -q 'getGrokBotRouterChildEnv' "$TEST_HOST"
 [[ -x "$TEST_RUNTIME/node_modules/.bin/codex" ]]
 [[ -L "$TEST_BIN/grokbot-router" ]]
 [[ -x "$TEST_RUNTIME/bin/grokbot-router-watchdog" ]]
+[[ -x "$TEST_RUNTIME/bin/host-registry" ]]
+[[ -x "$TEST_RUNTIME/bin/verify-host-registry.mjs" ]]
+TEST_REGISTRY_ROOT="$TEMPORARY/registry-cache"
+ROUTER_HOST_REGISTRY_ROOT="$TEST_REGISTRY_ROOT" \
+  "$TEST_RUNTIME/bin/host-registry" verify \
+  | grep -q "$TEST_RUNTIME/compatibility/0.30.0-hosts.json"
+mkdir -p "$TEST_REGISTRY_ROOT"
+cp "$PAYLOAD/compatibility/0.30.0-hosts.json" "$TEST_REGISTRY_ROOT/0.30.0-hosts.json"
+cp "$PAYLOAD/compatibility/0.30.0-hosts.json.sig" "$TEST_REGISTRY_ROOT/0.30.0-hosts.json.sig"
+ROUTER_HOST_REGISTRY_ROOT="$TEST_REGISTRY_ROOT" \
+  "$TEST_RUNTIME/bin/host-registry" verify \
+  | grep -q "$TEST_REGISTRY_ROOT/0.30.0-hosts.json"
 for skill_name in provider models model reasoning router doctor; do
   [[ ! -e "$TEST_GROK_SKILLS/$skill_name" && ! -L "$TEST_GROK_SKILLS/$skill_name" ]]
 done

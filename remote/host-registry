@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_SOURCE" ]]; do
+  SCRIPT_DIRECTORY="$(cd -P "$(dirname "$SCRIPT_SOURCE")" && pwd)"
+  SCRIPT_SOURCE="$(readlink "$SCRIPT_SOURCE")"
+  if [[ "$SCRIPT_SOURCE" != /* ]]; then
+    SCRIPT_SOURCE="$SCRIPT_DIRECTORY/$SCRIPT_SOURCE"
+  fi
+done
+INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
+REGISTRY_ROOT="${ROUTER_HOST_REGISTRY_ROOT:-/home/box/sand-data/grokbot-router-compatibility}"
+REGISTRY_PATH="$REGISTRY_ROOT/0.30.0-hosts.json"
+SIGNATURE_PATH="$REGISTRY_ROOT/0.30.0-hosts.json.sig"
+BUNDLED_REGISTRY_PATH="$INSTALL_ROOT/compatibility/0.30.0-hosts.json"
+BUNDLED_SIGNATURE_PATH="$INSTALL_ROOT/compatibility/0.30.0-hosts.json.sig"
+PUBLIC_KEY="$INSTALL_ROOT/compatibility/registry-public-key.pem"
+VERIFIER="$INSTALL_ROOT/bin/verify-host-registry.mjs"
+OFFICIAL_REGISTRY_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/0.30.0-hosts.json"
+OFFICIAL_SIGNATURE_URL="https://raw.githubusercontent.com/promptadvisers/grokrouter/main/compatibility/0.30.0-hosts.json.sig"
+
+verify_registry() {
+  node "$VERIFIER" "$1" "$2" "$PUBLIC_KEY" >/dev/null
+}
+
+case "${1:-verify}" in
+  verify)
+    if verify_registry "$REGISTRY_PATH" "$SIGNATURE_PATH" 2>/dev/null; then
+      printf '%s\n' "$REGISTRY_PATH"
+    else
+      verify_registry "$BUNDLED_REGISTRY_PATH" "$BUNDLED_SIGNATURE_PATH"
+      printf '%s\n' "$BUNDLED_REGISTRY_PATH"
+    fi
+    ;;
+  refresh)
+    if ! command -v curl >/dev/null 2>&1; then
+      printf 'No compatibility update was downloaded because curl is unavailable.\n' >&2
+      exit 1
+    fi
+    mkdir -p "$(dirname "$REGISTRY_ROOT")"
+    temporary="$(mktemp -d "${REGISTRY_ROOT}.download.XXXXXX")"
+    trap 'rm -rf "$temporary"' EXIT
+    registry_url="$OFFICIAL_REGISTRY_URL"
+    signature_url="$OFFICIAL_SIGNATURE_URL"
+    if [[ "${ROUTER_HOST_REGISTRY_ALLOW_OVERRIDE:-0}" == "1" ]]; then
+      registry_url="${ROUTER_HOST_REGISTRY_URL:-$registry_url}"
+      signature_url="${ROUTER_HOST_REGISTRY_SIGNATURE_URL:-$signature_url}"
+    fi
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 5 --max-time 15 --retry 2 \
+      "$registry_url" --output "$temporary/registry.json"
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 5 --max-time 15 --retry 2 \
+      "$signature_url" --output "$temporary/registry.sig"
+    verify_registry "$temporary/registry.json" "$temporary/registry.sig"
+    mkdir -p "$REGISTRY_ROOT"
+    cp "$temporary/registry.json" "$REGISTRY_PATH.tmp"
+    cp "$temporary/registry.sig" "$SIGNATURE_PATH.tmp"
+    chmod 600 "$REGISTRY_PATH.tmp" "$SIGNATURE_PATH.tmp"
+    mv "$REGISTRY_PATH.tmp" "$REGISTRY_PATH"
+    mv "$SIGNATURE_PATH.tmp" "$SIGNATURE_PATH"
+    printf '%s\n' "$REGISTRY_PATH"
+    ;;
+  *)
+    printf 'Usage: host-registry verify|refresh\n' >&2
+    exit 2
+    ;;
+esac

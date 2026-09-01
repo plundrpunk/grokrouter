@@ -65,7 +65,7 @@ Open the official Grok Bot app. Select any Bot, click **Open computer**, and lea
 The fastest path is one pinned command. Open your Mac's **Terminal**, paste this entire line, and press Return:
 
 ```bash
-/usr/bin/curl --fail --silent --show-error --location https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.44/scripts/install-macos.sh --output /tmp/grokrouter-install.sh && /bin/bash /tmp/grokrouter-install.sh
+/usr/bin/curl --fail --silent --show-error --location https://raw.githubusercontent.com/promptadvisers/grokrouter/source-v0.1.0-beta.45/scripts/install-macos.sh --output /tmp/grokrouter-install.sh && /bin/bash /tmp/grokrouter-install.sh
 ```
 
 It downloads the exact tagged source, builds GrokRouter locally, verifies it, installs it in your Applications folder, and opens it. It does not use `sudo`.
@@ -131,7 +131,7 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | What you see | What to do |
 | --- | --- |
 | `/provider` is missing from the slash menu | Type the complete `/provider` command manually and press Return. Then follow [the missing-command checklist](#provider-is-missing-from-the-slash-menu). |
-| You installed from a fork, old clone, or old ZIP | Do not troubleshoot that copy. Run the pinned beta.44 command in [Step 2](#2-install-and-open-grokrouter) so the installer is built from the exact official tag. |
+| You installed from a fork, old clone, or old ZIP | Do not troubleshoot that copy. Run the pinned beta.45 command in [Step 2](#2-install-and-open-grokrouter) so the installer is built from the exact official tag. |
 | Apple Command Line Tools are required | Finish Apple's installation, then repeat whichever installation path you used. |
 | macOS will not open the command | Control-click **Install GrokRouter.command**, choose **Open**, then confirm **Open**. Do not disable Gatekeeper. |
 | `install Grok Bot 0.30.0 in Applications first` | Put the official app at `/Applications/Grok Bot.app`, open it once, then retry. |
@@ -142,7 +142,8 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | Installation stopped with another error | Click **Copy safe diagnostics** and paste the report into a GitHub issue. It excludes credentials, conversations, and Bot files. |
 | Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
-| The version says beta.44, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
+| Step 5 says this Bot computer uses a new stock host variant | Beta.45 automatically checks the signed compatibility registry once. Nothing is patched if the exact hash and byte count are still unknown. Click **Copy safe diagnostics** and open the support issue; the complete non-secret fingerprint is included. |
+| The version says beta.45, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
 | Grok Bot answers a router command conversationally, opens its terminal, or offers to install/repair GrokRouter itself | Stop that attempt. The router did not intercept the command. Use the GrokRouter desktop app on the Mac to run Doctor and Repair Router. |
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
 
@@ -155,7 +156,7 @@ GrokRouter has two pieces that must agree:
 1. **Runtime files** contain the provider code and display the GrokRouter version.
 2. **The active host adapter** makes Grok Bot intercept commands such as `/provider` before an ordinary model sees them.
 
-Seeing `0.1.0-beta.44` proves only the first piece. If Doctor reports `stock-or-unknown`, `no router marker`, or `host adapter is not patched`, the runtime exists but the Grok host currently running is stock or was replaced. This is an adapter mismatch—not a request to download a newer version.
+Seeing `0.1.0-beta.45` proves only the first piece. If Doctor reports `stock-or-unknown`, `no router marker`, or `host adapter is not patched`, the runtime exists but the Grok host currently running is stock or was replaced. This is an adapter mismatch—not a request to download a newer version.
 
 Repair it in this exact order:
 
@@ -167,7 +168,18 @@ Repair it in this exact order:
 6. After GrokRouter finishes, fully quit and reopen Grok Bot. Create a genuinely new Bot.
 7. Manually type `/router doctor`, then `/provider`, into the new Bot's normal message box.
 
-The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.44: OK` and `/provider` immediately names the selected provider and model. If Grok replies in normal prose, opens a terminal, or offers to repair anything, interception still failed; return to the Mac GrokRouter app and copy **safe diagnostics**.
+The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.45: OK` and `/provider` immediately names the selected provider and model. If Grok replies in normal prose, opens a terminal, or offers to repair anything, interception still failed; return to the Mac GrokRouter app and copy **safe diagnostics**.
+
+### A new stock host variant is not an endless reinstall
+
+Grok can serve several Bot-computer host builds behind the same Grok Bot 0.30.0 Mac app. Beta.45 handles that without guessing:
+
+1. It checks the exact hash and byte count bundled with the installer.
+2. If the host is new, it downloads the small public compatibility registry and verifies its Ed25519 signature with a public key pinned inside GrokRouter.
+3. It retries only when that signed registry contains the exact hash-and-size pair and the bundled source anchors still match exactly once.
+4. If the host is still unknown, it changes nothing and creates a complete safe report containing two SHA halves, byte count, cloud architecture, anchor counts, and a read-only patch syntax result.
+
+Click **Copy safe diagnostics** and submit that report. Do not paste Grok's proprietary host source into GitHub. After a reviewed compatibility entry is published, beta.45 can pick it up through **Try installation again** or **Repair Router**; users do not need another installer build merely to receive the new exact allowlist entry.
 
 ### `/provider` is missing from the slash menu
 
@@ -179,7 +191,7 @@ Follow these steps in order. Stop as soon as a step passes.
 2. **Read the result.** If the reply names `Codex SDK` or `OpenRouter` and a model, routing works. You can keep typing the commands manually; the missing suggestion is only a discovery-menu problem.
 3. **Identify ordinary Grok behavior.** If Grok answers in normal prose, opens a terminal, or offers to install or repair the router, the command was not intercepted. Stop that attempt and follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched).
 4. **Make sure the test Bot is new.** Create a genuinely new Bot **after** the latest installation, then manually send `/router doctor` followed by `/provider`.
-5. **Replace stale source.** If you installed from a fork, old clone, bookmark, or previously downloaded ZIP, use the pinned beta.44 Terminal command from [Step 2](#2-install-and-open-grokrouter). It downloads the exact official tag into a new temporary folder; it does not depend on your old checkout.
+5. **Replace stale source.** If you installed from a fork, old clone, bookmark, or previously downloaded ZIP, use the pinned beta.45 Terminal command from [Step 2](#2-install-and-open-grokrouter). It downloads the exact official tag into a new temporary folder; it does not depend on your old checkout.
 6. **Reinstall with the Bot computer visible.** Open Grok Bot 0.30.0, select any Bot, click **Open computer**, and leave it open. Open GrokRouter, choose the provider, and click **Install Router**. Follow any large **Action needed** instruction. Do not close either app.
 7. **Wait for both receipts.** The activity log must show a line beginning with `✓ Installed`. It should also say that it verified six unique GrokRouter commands. A spinning indicator, an ordinary Grok reply, or a missing slash suggestion is not an installation receipt.
 8. **Retry the supported way.** If installation stops, use **Try installation again**. If Doctor reports a damaged or replaced host, use **Repair Router**, wait for success, and repeat the new-Bot test.
@@ -194,7 +206,7 @@ After a repair or reinstall, fully quit and reopen Grok Bot only after GrokRoute
 /models
 ```
 
-The setup passes when Doctor begins with `Router 0.1.0-beta.44: OK`, `/provider` names the selected provider and model, `/models` returns the packaged list, and a normal message receives one normal response.
+The setup passes when Doctor begins with `Router 0.1.0-beta.45: OK`, `/provider` names the selected provider and model, `/models` returns the packaged list, and a normal message receives one normal response.
 
 ## Everyday commands
 
@@ -231,7 +243,7 @@ to Grok Bot, paste installer commands into Grok chat, or treat Grok Bot's own
 terminal activity as a successful Mac-side installation.
 
 Official source: https://github.com/promptadvisers/grokrouter
-Required source tag: source-v0.1.0-beta.44
+Required source tag: source-v0.1.0-beta.45
 Supported target: Apple-silicon macOS 12 or later with the official app at
 /Applications/Grok Bot.app, exactly version 0.30.0.
 
@@ -256,7 +268,7 @@ SAFETY BOUNDARIES
 - Do not delete Grok Bot files, disable Gatekeeper, use sudo, overwrite my
   existing repository, or modify source code merely to make a check pass.
 - If my checkout is a fork or stale clone, leave it untouched and use the
-  pinned official beta.44 installer command from README.md.
+  pinned official beta.45 installer command from README.md.
 
 TROUBLESHOOTING LOOP
 1. Confirm the Mac architecture, macOS version, Grok Bot path, exact Grok Bot
@@ -266,12 +278,12 @@ TROUBLESHOOTING LOOP
    provider/model receipt, reaches ordinary model inference, or is ignored.
    If Grok replies conversationally, opens its terminal, or offers to repair or
    install anything, stop that attempt: the live host adapter did not intercept
-   the command. A displayed beta.44 runtime version does not override this test.
-3. If the runtime says beta.44 but Doctor reports stock-or-unknown, no router
+   the command. A displayed beta.45 runtime version does not override this test.
+3. If the runtime says beta.45 but Doctor reports stock-or-unknown, no router
    marker, or an unpatched host adapter, use the Mac GrokRouter app's Run Doctor
    and Repair Router actions. Do not ask Grok Bot to repair itself.
 4. If the current install is stale or otherwise unhealthy, use the pinned official
-   beta.44 source installer from README.md. Open Grok Bot, select any Bot, open
+   beta.45 source installer from README.md. Open Grok Bot, select any Bot, open
    its computer, run GrokRouter's Install Router action, and respond to any
    Action needed state. Wait for the authoritative installed receipt and the
    message verifying six unique GrokRouter commands.
@@ -295,7 +307,7 @@ TROUBLESHOOTING LOOP
    or a genuine external blocker remains.
 
 ACCEPTANCE CHECKS
-- /router doctor begins with: Router 0.1.0-beta.44: OK
+- /router doctor begins with: Router 0.1.0-beta.45: OK
 - /provider names the provider and model selected in GrokRouter.
 - /models returns the packaged model list.
 - A normal exact-text request returns exactly one settled answer.
@@ -448,7 +460,7 @@ Invalid or near-miss model controls return bounded help instead of becoming mode
 | Slash discovery skills | `skills/` | Publish the deterministic router controls through Grok's user-invocable skill menu without replacing conflicting user skills |
 | Management CLI | `remote/grokbot-router` | Status, enable, disable, repair, Doctor, and verified stock uninstall |
 | Lifecycle watchdog | `remote/grokbot-router-watchdog` | Rate-limited repair when Grok replaces the live host with a known stock build; never repairs an unknown build or intentional restore |
-| Compatibility manifests | `patch/manifests/` | Exact Grok version, stock-host SHA-256 allowlist, size, and required source anchors |
+| Compatibility manifests | `patch/manifests/`, `compatibility/` | Bundled exact Grok version, source anchors, signed centrally updateable stock-host SHA-256 and byte-count pairs, and the pinned registry public key |
 | Patch engine | `patch/router_patch.py` | Original transformation, syntax check, atomic activation, verified backup, dry run, and restore |
 | Provider runtime | `runtime/run-provider.mjs` | Controls, stable Bot identity, per-Bot state, replay protection, Codex/OpenRouter adapters, tool conversion, and redacted audit |
 | Provider defaults | `runtime/provider.default.json` | Packaged provider/model catalog and installer defaults—never credentials |
@@ -463,7 +475,7 @@ No proprietary Grok host source is committed or bundled. The repository contains
 The installer exposes the recovery path directly:
 
 - **Run Doctor** checks the installed version, patch status, providers, protected credential shape, Node, and the tool bridge.
-- **Repair Router** reapplies the adapter only if the live host is an exact allowlisted stock build.
+- **Repair Router** checks for a signed compatibility update, then reapplies the adapter only if the live host is an exact allowlisted stock hash-and-size pair.
 - **Restore Stock Grok Bot** verifies the persistent stock backup, restores it atomically, disables automatic repair, and restarts the host.
 
 The same controls are available inside the Bot computer:
@@ -481,7 +493,7 @@ grokbot-router uninstall
 
 ## Safety by construction
 
-- **Exact compatibility:** the patch requires a supported app version, allowlisted stock-host SHA-256, expected size, and exact source anchors.
+- **Exact compatibility:** the patch requires a supported app version, an allowlisted stock-host SHA-256 and byte-count pair from the bundled or signed registry, and exact bundled source anchors.
 - **Fail closed:** an unknown hash, missing anchor, invalid generated host, invalid credential shape, or unverified terminal stops the operation.
 - **Reversible:** verified stock and timestamped pre-change backups exist before activation.
 - **Atomic:** generated JavaScript is syntax-checked and replaced atomically; failed activation restores the previous runtime.
@@ -524,7 +536,7 @@ Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritati
 
 ## Release truth
 
-Beta.44 makes setup failures recoverable instead of leaving the installer spinning: numbered phases, a clear action-needed state, bounded diagnostic and network operations, one-click retry, safe diagnostics, fresh diagnostic sessions after a Bot-computer swap, verified dependency reuse, and an OpenRouter-only path with no Codex download.
+Beta.45 keeps beta.44's recoverable installer and adds a signed compatibility registry for Grok's rotating 0.30.0 Bot-computer hosts. Unknown variants trigger one bounded update check, remain untouched unless the exact hash and byte count are signed, and produce a complete non-secret compatibility report with a read-only patch syntax result.
 
 The exact local macOS beta.44 lifecycle completed install → verified stock restore → reinstall. A genuinely new Bot passed Doctor, model switching, provider identity, deterministic near-miss controls, exact-once text delivery, and second-Bot state isolation. The Windows x64 and Arm64 applications build and checksum successfully from current source, but have not yet passed a native Windows install → restore → reinstall → fresh-Bot cycle. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
 

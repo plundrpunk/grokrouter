@@ -68,7 +68,7 @@ class RouterPatchTests(unittest.TestCase):
             json.dumps(
                 {
                     "grokBotVersion": "test",
-                    "stockHostSha256": [digest],
+                    "stockHosts": [{"sha256": digest, "bytes": self.host.stat().st_size}],
                     "requiredAnchors": [
                         "function createMockPromptExecutor(options2)",
                         "createSession(onRequestId, sessionOptions)",
@@ -118,15 +118,47 @@ class RouterPatchTests(unittest.TestCase):
 
     def test_unknown_host_is_rejected_without_development_override(self):
         self.host.write_text(STOCK_SOURCE + "// changed\n")
+        report = router_patch.inspect_host(self.host, self.manifest)
+        self.assertEqual(report["patchDryRun"], "pass")
+        self.assertTrue(all(len(line) < 80 for line in router_patch.compatibility_report(self.host, self.manifest).splitlines()))
+        with self.assertRaisesRegex(router_patch.PatchError, "HOSTSHA1="):
+            router_patch.install(
+                self.host, self.backup, self.manifest, dry_run=True, allow_unknown=False
+            )
+
+    def test_exact_hash_with_wrong_size_is_rejected(self):
+        digest = hashlib.sha256(self.host.read_bytes()).hexdigest()
+        self.manifest["stockHosts"] = [{"sha256": digest, "bytes": self.host.stat().st_size + 1}]
         with self.assertRaises(router_patch.PatchError):
             router_patch.install(
                 self.host, self.backup, self.manifest, dry_run=True, allow_unknown=False
             )
 
+    def test_signed_registry_can_extend_exact_hash_and_size_pairs(self):
+        self.host.write_text(STOCK_SOURCE + "// compatible variant\n")
+        digest = hashlib.sha256(self.host.read_bytes()).hexdigest()
+        registry_path = Path(self.temporary.name) / "registry.json"
+        registry_path.write_text(json.dumps({
+            "schemaVersion": 1,
+            "grokBotVersion": "test",
+            "stockHosts": [{"sha256": digest, "bytes": self.host.stat().st_size}],
+        }))
+        registry = router_patch.load_host_registry(registry_path, self.manifest)
+        result = router_patch.install(
+            self.host,
+            self.backup,
+            self.manifest,
+            dry_run=True,
+            allow_unknown=False,
+            registry=registry,
+        )
+        self.assertEqual(result["status"], "dry-run")
+
     def test_missing_or_duplicate_anchor_is_rejected(self):
         self.host.write_text(STOCK_SOURCE.replace("function createMockPromptExecutor", "function wrong"))
+        self.assertEqual(router_patch.inspect_host(self.host, self.manifest)["patchDryRun"], "fail")
         digest = hashlib.sha256(self.host.read_bytes()).hexdigest()
-        self.manifest["stockHostSha256"] = [digest]
+        self.manifest["stockHosts"] = [{"sha256": digest, "bytes": self.host.stat().st_size}]
         with self.assertRaises(router_patch.PatchError):
             router_patch.install(
                 self.host, self.backup, self.manifest, dry_run=True, allow_unknown=False

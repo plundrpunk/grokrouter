@@ -7,13 +7,13 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting this. Never paste an OpenRouter key, Codex device code, password, conversation, or private Bot file.
+        Thanks for reporting this. Never paste an OpenRouter key, Codex device code, password, conversation, private Bot file, or Grok host source. GrokRouter's safe report contains the complete non-secret fingerprint we need.
 
   - type: dropdown
     id: platform
     attributes:
       label: Platform
-      description: The beginner-tested path is Apple-silicon macOS. Windows remains a source preview.
+      description: Choose the physical computer running the Grok Bot desktop app. The Bot computer may separately report x86_64; that is normal cloud architecture, not Windows on your Mac.
       options:
         - Apple-silicon Mac
         - Windows x64 preview
@@ -26,7 +26,8 @@ body:
     id: grokrouter_version
     attributes:
       label: GrokRouter version
-      placeholder: 0.1.0-beta.44
+      description: Enter the Installer line from Copy safe diagnostics, such as 0.1.0-beta.45. Do not enter Grok Bot 0.30.0 here.
+      placeholder: 0.1.0-beta.45
     validations:
       required: true
 
@@ -36,7 +37,7 @@ body:
       label: Installation source
       description: Old forks and downloaded copies can contain an earlier router even when this README is current.
       options:
-        - Pinned beta.44 Terminal command from the official README
+        - Pinned beta.45 Terminal command from the official README
         - ZIP downloaded from the official repository
         - Fork, clone, old ZIP, or another source
         - I do not know
@@ -47,12 +48,12 @@ body:
     id: literal_provider_result
     attributes:
       label: Result after manually typing /provider
-      description: Type the complete /provider command in a genuinely new Bot. Do not rely on the slash-suggestion menu.
+      description: Complete this only after installation says it finished. Type the full command in a genuinely new Bot; do not rely on the slash-suggestion menu.
       options:
         - It named Codex SDK or OpenRouter and a model
         - It produced an ordinary AI answer
         - It was ignored or produced no answer
-        - I could not complete this check
+        - Installation did not finish, so I did not test this
     validations:
       required: true
 
@@ -60,12 +61,12 @@ body:
     id: host_adapter_result
     attributes:
       label: Host adapter result
-      description: Use GrokRouter's Mac-side Run Doctor result. Do not ask Grok Bot to install or repair itself.
+      description: Use the Mac GrokRouter app's Run Doctor result. Do not ask Grok Bot to install or repair itself.
       options:
         - Patched and verified
         - stock-or-unknown or no router marker
         - Unsupported or changed host
-        - I could not complete this check
+        - Installation stopped before I could run Doctor
     validations:
       required: true
 
@@ -73,7 +74,7 @@ body:
     id: safe_diagnostics
     attributes:
       label: Safe diagnostics
-      description: In GrokRouter, click Copy safe diagnostics and paste the report here.
+      description: In the Mac GrokRouter app, click Copy safe diagnostics and paste the entire report once. Beta.45 includes HOSTSHA1, HOSTSHA2, HOSTBYTES, CLOUDARCH, ANCHORS, and PATCHDRYRUN for a new stock variant without exposing source.
       render: text
     validations:
       required: true
@@ -93,4 +94,6 @@ body:
       label: Privacy check
       options:
         - label: I confirmed this report contains no API key, device code, password, conversation, or private Bot file.
+          required: true
+        - label: I did not bypass the version, hash, byte-count, signature, or anchor checks and did not paste Grok host source.
           required: true

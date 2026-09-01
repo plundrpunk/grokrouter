@@ -12,6 +12,7 @@ done
 INSTALL_ROOT="$(cd -P "$(dirname "$SCRIPT_SOURCE")/.." && pwd)"
 CONFIG_PATH="$INSTALL_ROOT/provider.json"
 PATCHER="$INSTALL_ROOT/patch/router_patch.py"
+HOST_REGISTRY_TOOL="$INSTALL_ROOT/bin/host-registry"
 CODEX_CLI="$INSTALL_ROOT/node_modules/.bin/codex"
 GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 PATCH_ARGS=(
@@ -22,6 +23,41 @@ PATCH_ARGS=(
 if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
   PATCH_ARGS+=(--allow-unknown-host)
 fi
+set_registry_args() {
+  ACTIVE_REGISTRY=""
+  if [[ -x "$HOST_REGISTRY_TOOL" ]] && registry_path="$("$HOST_REGISTRY_TOOL" verify 2>/dev/null)"; then
+    ACTIVE_REGISTRY="$registry_path"
+  fi
+}
+refresh_registry_args() {
+  if [[ -x "$HOST_REGISTRY_TOOL" ]] && registry_path="$("$HOST_REGISTRY_TOOL" refresh 2>/dev/null)"; then
+    ACTIVE_REGISTRY="$registry_path"
+    return 0
+  fi
+  return 1
+}
+set_registry_args
+run_patch_install() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$PATCHER" "${PATCH_ARGS[@]}" --host-registry "$ACTIVE_REGISTRY" --json
+  else
+    python3 "$PATCHER" "${PATCH_ARGS[@]}" --json
+  fi
+}
+run_patch_doctor() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$PATCHER" --doctor "${PATCH_ARGS[@]}" --host-registry "$ACTIVE_REGISTRY" --json
+  else
+    python3 "$PATCHER" --doctor "${PATCH_ARGS[@]}" --json
+  fi
+}
+run_patch_restore() {
+  if [[ -n "$ACTIVE_REGISTRY" ]]; then
+    python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --host-registry "$ACTIVE_REGISTRY" --json
+  else
+    python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --json
+  fi
+}
 
 usage() {
   printf '%s\n' \
@@ -118,7 +154,15 @@ EOF
 
 repair_host() {
   require_config
-  python3 "$PATCHER" "${PATCH_ARGS[@]}" --json
+  if ! repair_output="$(run_patch_install 2>&1)"; then
+    printf 'Checking for a signed compatibility update…\n'
+    refresh_registry_args || true
+    if ! repair_output="$(run_patch_install 2>&1)"; then
+      printf '%s\n' "$repair_output" >&2
+      return 1
+    fi
+  fi
+  printf '%s\n' "$repair_output"
   update_config enabled true
   update_config autoRepair true
   start_watchdog
@@ -153,9 +197,13 @@ PY
     printf '  Provider runner: '
     node --check "$INSTALL_ROOT/run-provider.mjs" >/dev/null && printf 'OK\n'
     printf 'Host adapter\n'
-    if ! python3 "$PATCHER" --doctor "${PATCH_ARGS[@]}" --json; then
-      doctor_ok=0
+    if ! doctor_output="$(run_patch_doctor 2>&1)"; then
+      refresh_registry_args || true
+      if ! doctor_output="$(run_patch_doctor 2>&1)"; then
+        doctor_ok=0
+      fi
     fi
+    printf '%s\n' "$doctor_output"
     printf 'Codex\n'
     if [[ -x "$CODEX_CLI" ]]; then
       "$CODEX_CLI" login status 2>&1 | sed -E 's/([A-Za-z0-9._%+-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[account]/g' || true
@@ -251,7 +299,7 @@ PY
     require_config
     update_config autoRepair false
     stop_watchdog
-    python3 "$PATCHER" --restore "${PATCH_ARGS[@]}" --json
+    run_patch_restore
     update_config enabled false
     for skill_name in provider models model reasoning router doctor; do
       skill_source="$INSTALL_ROOT/skills/$skill_name"

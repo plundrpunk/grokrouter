@@ -1,6 +1,6 @@
 # Verification matrix
 
-Research/build lock: 2026-08-31. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.44.
+Research/build lock: 2026-09-01. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.45.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |

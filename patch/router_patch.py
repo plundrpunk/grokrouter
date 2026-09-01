@@ -12,10 +12,12 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
@@ -107,7 +109,7 @@ function appendGrokBotRouterHostError(config, error) {
     const auditPath = config?.auditPath || "/home/box/sand-data/grokbot-router/audit.jsonl";
     require("node:fs").appendFileSync(auditPath, `${JSON.stringify({
       timestamp: new Date().toISOString(),
-      version: "0.1.0-beta.44",
+      version: "0.1.0-beta.45",
       event: "host_bridge_error",
       diagnostic
     })}\n`, { encoding: "utf8", mode: 0o600 });
@@ -283,19 +285,141 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def validate_stock_hosts(value: Any, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise PatchError(f"{label} has no stockHosts list")
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            raise PatchError(f"{label} has an invalid stockHosts entry")
+        digest = item.get("sha256")
+        byte_count = item.get("bytes")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+            raise PatchError(f"{label} has an invalid stock host SHA-256")
+        if not isinstance(byte_count, int) or isinstance(byte_count, bool) or byte_count <= 0:
+            raise PatchError(f"{label} has an invalid stock host byte count")
+        if digest in seen:
+            raise PatchError(f"{label} repeats stock host SHA-256 {digest}")
+        seen.add(digest)
+        normalized.append({"sha256": digest, "bytes": byte_count})
+    return normalized
+
+
 def load_manifest(path: Path) -> dict[str, Any]:
     try:
         manifest = json.loads(path.read_text())
     except Exception as error:
         raise PatchError(f"Cannot read compatibility manifest {path}: {error}") from error
-    expected = manifest.get("stockHostSha256")
-    if not isinstance(expected, list) or not all(isinstance(item, str) for item in expected):
-        raise PatchError("Compatibility manifest has no valid stockHostSha256 list")
+    manifest["stockHosts"] = validate_stock_hosts(
+        manifest.get("stockHosts"), "Compatibility manifest"
+    )
+    anchors = manifest.get("requiredAnchors")
+    if not isinstance(anchors, list) or not anchors or not all(isinstance(item, str) and item for item in anchors):
+        raise PatchError("Compatibility manifest has no valid requiredAnchors list")
     return manifest
 
 
-def is_allowed_stock(path: Path, manifest: dict[str, Any]) -> bool:
-    return path.exists() and sha256(path) in set(manifest["stockHostSha256"])
+def load_host_registry(path: Path, manifest: dict[str, Any]) -> dict[str, Any]:
+    try:
+        registry = json.loads(path.read_text())
+    except Exception as error:
+        raise PatchError(f"Cannot read signed host registry {path}: {error}") from error
+    if registry.get("schemaVersion") != 1:
+        raise PatchError("Signed host registry has an unsupported schemaVersion")
+    if registry.get("grokBotVersion") != manifest.get("grokBotVersion"):
+        raise PatchError("Signed host registry targets a different Grok Bot version")
+    registry["stockHosts"] = validate_stock_hosts(
+        registry.get("stockHosts"), "Signed host registry"
+    )
+    return registry
+
+
+def allowed_stock_hosts(
+    manifest: dict[str, Any],
+    registry: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    combined = [*manifest["stockHosts"], *(registry or {}).get("stockHosts", [])]
+    return list({item["sha256"]: item for item in combined}.values())
+
+
+def is_allowed_stock(
+    path: Path,
+    manifest: dict[str, Any],
+    registry: dict[str, Any] | None = None,
+) -> bool:
+    if not path.exists():
+        return False
+    digest = sha256(path)
+    byte_count = path.stat().st_size
+    return any(
+        item["sha256"] == digest and item["bytes"] == byte_count
+        for item in allowed_stock_hosts(manifest, registry)
+    )
+
+
+def inspect_host(
+    host: Path,
+    manifest: dict[str, Any],
+    registry: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not host.exists():
+        return {
+            "ok": False,
+            "status": "missing",
+            "host": str(host),
+            "supportedVersion": manifest.get("grokBotVersion"),
+        }
+    source = host.read_text(errors="replace")
+    digest = sha256(host)
+    byte_count = host.stat().st_size
+    anchors = [source.count(anchor) for anchor in manifest.get("requiredAnchors", [])]
+    patch_dry_run = "not-applicable"
+    if MARKER not in source and not LEGACY_MARKER.search(source):
+        try:
+            validate_anchors(source, manifest)
+            patched = patch_text(source)
+            with tempfile.NamedTemporaryFile("w", suffix=".cjs", delete=False) as temporary:
+                temporary.write(patched)
+                temporary_path = Path(temporary.name)
+            try:
+                syntax_check(temporary_path)
+            finally:
+                temporary_path.unlink(missing_ok=True)
+            patch_dry_run = "pass"
+        except Exception:
+            patch_dry_run = "fail"
+    return {
+        "ok": is_allowed_stock(host, manifest, registry) and all(count == 1 for count in anchors),
+        "status": "patched" if MARKER in source else "known-stock" if is_allowed_stock(host, manifest, registry) else "unknown-stock-candidate",
+        "host": str(host),
+        "hostSha256": digest,
+        "hostBytes": byte_count,
+        "cloudArchitecture": platform.machine(),
+        "anchorCounts": anchors,
+        "patchDryRun": patch_dry_run,
+        "routerMarker": MARKER in source,
+        "legacyMarker": bool(LEGACY_MARKER.search(source)),
+        "supportedVersion": manifest.get("grokBotVersion"),
+    }
+
+
+def compatibility_report(host: Path, manifest: dict[str, Any]) -> str:
+    report = inspect_host(host, manifest)
+    digest = str(report.get("hostSha256") or "missing")
+    first = digest[:32]
+    second = digest[32:]
+    counts = ",".join(str(value) for value in report.get("anchorCounts", [])) or "missing"
+    return "\n".join(
+        [
+            f"HOSTSHA1={first}",
+            f"HOSTSHA2={second}",
+            f"HOSTBYTES={report.get('hostBytes', 'missing')}",
+            f"CLOUDARCH={report.get('cloudArchitecture', 'unknown')}",
+            f"ANCHORS={counts}",
+            f"PATCHDRYRUN={str(report.get('patchDryRun', 'unknown')).upper()}",
+        ]
+    )
 
 
 def validate_anchors(source: str, manifest: dict[str, Any]) -> None:
@@ -381,17 +505,18 @@ def verified_stock_source(
     backup: Path,
     manifest: dict[str, Any],
     allow_unknown: bool,
+    registry: dict[str, Any] | None = None,
 ) -> Path:
     if host.exists() and MARKER not in host.read_text(errors="replace") and not LEGACY_MARKER.search(host.read_text(errors="replace")):
-        if allow_unknown or is_allowed_stock(host, manifest):
+        if allow_unknown or is_allowed_stock(host, manifest, registry):
             return host
     for candidate in (backup, *LEGACY_BACKUPS):
-        if candidate.exists() and (allow_unknown or is_allowed_stock(candidate, manifest)):
+        if candidate.exists() and (allow_unknown or is_allowed_stock(candidate, manifest, registry)):
             return candidate
-    host_hash = sha256(host) if host.exists() else "missing"
     raise PatchError(
-        "No verified stock Grok Bot host is available. "
-        f"Current host SHA-256: {host_hash}. Supported app version: {manifest.get('grokBotVersion')}."
+        "This Grok Bot computer uses a new stock host variant. Nothing was changed.\n"
+        f"{compatibility_report(host, manifest)}\n"
+        f"SUPPORTEDVERSION={manifest.get('grokBotVersion')}"
     )
 
 
@@ -401,6 +526,7 @@ def install(
     manifest: dict[str, Any],
     dry_run: bool,
     allow_unknown: bool,
+    registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not host.exists():
         raise PatchError(f"Host not found: {host}")
@@ -412,7 +538,7 @@ def install(
             "host": str(host),
             "hostSha256": sha256(host),
         }
-    stock = verified_stock_source(host, backup, manifest, allow_unknown)
+    stock = verified_stock_source(host, backup, manifest, allow_unknown, registry)
     source = stock.read_text()
     validate_anchors(source, manifest)
     patched = patch_text(source)
@@ -453,16 +579,17 @@ def restore(
     manifest: dict[str, Any],
     dry_run: bool,
     allow_unknown: bool,
+    registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not backup.exists():
         for legacy in LEGACY_BACKUPS:
-            if legacy.exists() and (allow_unknown or is_allowed_stock(legacy, manifest)):
+            if legacy.exists() and (allow_unknown or is_allowed_stock(legacy, manifest, registry)):
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(legacy, backup)
                 break
     if not backup.exists():
         raise PatchError(f"Verified stock backup not found: {backup}")
-    if not allow_unknown and not is_allowed_stock(backup, manifest):
+    if not allow_unknown and not is_allowed_stock(backup, manifest, registry):
         raise PatchError(f"Stock backup hash is not allowed: {sha256(backup)}")
     if dry_run:
         return {"ok": True, "status": "restore-dry-run", "stockBackup": str(backup)}
@@ -485,6 +612,7 @@ def doctor(
     backup: Path,
     manifest: dict[str, Any],
     allow_unknown: bool = False,
+    registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     host_exists = host.exists()
     backup_exists = backup.exists()
@@ -494,7 +622,7 @@ def doctor(
             host_exists
             and MARKER in host_text
             and backup_exists
-            and (allow_unknown or is_allowed_stock(backup, manifest))
+            and (allow_unknown or is_allowed_stock(backup, manifest, registry))
         ),
         "status": "installed" if MARKER in host_text else "stock-or-unknown",
         "routerMarker": MARKER in host_text,
@@ -503,7 +631,7 @@ def doctor(
         "hostSha256": sha256(host) if host_exists else None,
         "stockBackup": str(backup),
         "stockBackupSha256": sha256(backup) if backup_exists else None,
-        "stockBackupVerified": is_allowed_stock(backup, manifest),
+        "stockBackupVerified": is_allowed_stock(backup, manifest, registry),
         "developmentOverride": allow_unknown,
         "supportedVersion": manifest.get("grokBotVersion"),
     }
@@ -519,21 +647,26 @@ def main() -> int:
     action = parser.add_mutually_exclusive_group()
     action.add_argument("--restore", action="store_true", help="restore the verified stock host")
     action.add_argument("--doctor", action="store_true", help="inspect installation health")
+    action.add_argument("--inspect", action="store_true", help="print a non-secret host compatibility report")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-unknown-host", action="store_true", help="development only")
     parser.add_argument("--host", type=Path, default=DEFAULT_HOST)
     parser.add_argument("--backup", type=Path, default=DEFAULT_BACKUP)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
+    parser.add_argument("--host-registry", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     manifest = load_manifest(args.manifest)
+    registry = load_host_registry(args.host_registry, manifest) if args.host_registry else None
     if args.doctor:
-        result = doctor(args.host, args.backup, manifest, args.allow_unknown_host)
+        result = doctor(args.host, args.backup, manifest, args.allow_unknown_host, registry)
+    elif args.inspect:
+        result = inspect_host(args.host, manifest, registry)
     elif args.restore:
-        result = restore(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host)
+        result = restore(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host, registry)
     else:
-        result = install(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host)
+        result = install(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host, registry)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

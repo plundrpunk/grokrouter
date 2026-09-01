@@ -1,3 +1,17 @@
+# GrokRouter 0.1.0-beta.45
+
+Signed compatibility updates for Grok Bot 0.30.0's rotating Bot-computer hosts.
+
+- GrokRouter still requires an exact stock-host SHA-256, exact byte count, and every bundled source anchor exactly once. Unknown hosts remain untouched.
+- If the bundled list does not recognize a host, Install Router and Repair Router perform one bounded download of the public host registry and verify its Ed25519 signature with a public key pinned inside the installer.
+- A newly reviewed exact host entry can therefore reach existing beta.45 users through **Try installation again** or **Repair Router** without asking everyone to rebuild the Mac app.
+- The lifecycle watchdog verifies the cached signed registry and checks for an update no more than once per hour when a replacement host is unknown.
+- Unknown variants now report `HOSTSHA1`, `HOSTSHA2`, `HOSTBYTES`, `CLOUDARCH`, `ANCHORS`, and `PATCHDRYRUN` on short OCR-safe lines. The report contains no host source, credentials, conversations, or Bot files.
+- The read-only compatibility probe applies the original transformation only to a temporary file, runs `node --check`, deletes the temporary file, and never activates an unknown host.
+- The issue form now separates the physical Mac from the Bot computer's cloud architecture, asks for the installer version instead of Grok Bot 0.30.0, and lets users say installation never finished instead of guessing that `/provider` or Doctor passed.
+
+Public issues #1 through #4 all report the same fail-closed cause: additional stock host variants are being served behind Grok Bot 0.30.0. Their exact hashes are not added by assertion alone; each remains pending until its complete fingerprint, read-only dry run, reviewed entry, and live acceptance are recorded.
+
 # GrokRouter 0.1.0-beta.44
 
 Beginner-safe installer recovery for Grok Bot 0.30.0.
