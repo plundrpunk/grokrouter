@@ -13,7 +13,7 @@ body:
     id: platform
     attributes:
       label: Platform
-      description: Choose the physical computer running the Grok Bot desktop app. The Bot computer may separately report x86_64; that is normal cloud architecture, not Windows on your Mac.
+      description: Choose the physical computer running the Grok Bot desktop app. Windows builds are source previews and have not completed native live acceptance; macOS Apple silicon is the supported beginner path. The Bot computer may separately report x86_64, which is normal cloud architecture.
       options:
         - Apple-silicon Mac
         - Windows x64 preview
@@ -35,9 +35,11 @@ body:
     id: install_source
     attributes:
       label: Installation source
-      description: Old forks and downloaded copies can contain an earlier router even when this README is current.
+      description: Choose the exact package or command you ran. The pinned Terminal command is macOS-only. Old forks and downloaded copies can contain an earlier router even when this README is current.
       options:
-        - Pinned beta.45 Terminal command from the official README
+        - Pinned beta.45 Mac Terminal command from the official README
+        - Windows x64 CI preview artifact
+        - Windows Arm64 CI preview artifact
         - ZIP downloaded from the official repository
         - Fork, clone, old ZIP, or another source
         - I do not know
@@ -45,10 +47,23 @@ body:
       required: true
 
   - type: dropdown
+    id: existing_router
+    attributes:
+      label: Was another Grok Bot router installed first?
+      description: Do not layer GrokRouter on top of OpenGrok or another router. More than one tool can modify the same cloud host, so the exact order matters.
+      options:
+        - No prior router
+        - Older GrokRouter only
+        - OpenGrok or another router
+        - More than one router, or I do not know
+    validations:
+      required: true
+
+  - type: dropdown
     id: literal_provider_result
     attributes:
       label: Result after manually typing /provider
-      description: Complete this only after installation says it finished. Type the full command in a genuinely new Bot; do not rely on the slash-suggestion menu.
+      description: Type the full command in a genuinely new Bot only after installation says it finished; do not rely on the slash-suggestion menu. If installation did not finish, choose that answer instead of testing an older Bot.
       options:
         - It named Codex SDK or OpenRouter and a model
         - It produced an ordinary AI answer
@@ -61,7 +76,7 @@ body:
     id: host_adapter_result
     attributes:
       label: Host adapter result
-      description: Use the Mac GrokRouter app's Run Doctor result. Do not ask Grok Bot to install or repair itself.
+      description: Use the GrokRouter desktop app's Run Doctor result. Do not ask Grok Bot to install or repair itself.
       options:
         - Patched and verified
         - stock-or-unknown or no router marker
@@ -74,7 +89,7 @@ body:
     id: safe_diagnostics
     attributes:
       label: Safe diagnostics
-      description: In the Mac GrokRouter app, click Copy safe diagnostics and paste the entire report once. Beta.45 includes HOSTSHA1, HOSTSHA2, HOSTBYTES, CLOUDARCH, ANCHORS, and PATCHDRYRUN for a new stock variant without exposing source.
+      description: In the GrokRouter desktop app, click Copy safe diagnostics and paste the entire report once. Beta.45 includes the non-secret host fingerprint for a genuinely new stock variant. Windows reports from source after beta.45 also preserve the last installer phase and fingerprint lines.
       render: text
     validations:
       required: true
@@ -83,8 +98,8 @@ body:
     id: visible_result
     attributes:
       label: What happened?
-      description: Describe the last visible step and what you expected to happen.
-      placeholder: It stopped while downloading dependencies after I opened the Bot computer.
+      description: Describe the last visible step, what you expected, and the exact order in which you ran GrokRouter, OpenGrok, or any other router.
+      placeholder: I ran OpenGrok first, then GrokRouter. GrokRouter stopped at Step 5 after I opened the Bot computer.
     validations:
       required: true
 

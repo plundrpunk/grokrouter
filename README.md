@@ -132,6 +132,7 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | --- | --- |
 | `/provider` is missing from the slash menu | Type the complete `/provider` command manually and press Return. Then follow [the missing-command checklist](#provider-is-missing-from-the-slash-menu). |
 | You installed from a fork, old clone, or old ZIP | Do not troubleshoot that copy. Run the pinned beta.45 command in [Step 2](#2-install-and-open-grokrouter) so the installer is built from the exact official tag. |
+| You previously installed OpenGrok or another router | Do not install one router on top of another. First create a genuinely new Bot and manually run `/router doctor` and `/provider`; if both identify GrokRouter beta.45 and your selected model, stop because it is already working. Otherwise use GrokRouter's **Restore Stock Grok Bot** and continue only if it confirms a verified restore. Never force, hand-edit, or copy a cloud-host backup. |
 | Apple Command Line Tools are required | Finish Apple's installation, then repeat whichever installation path you used. |
 | macOS will not open the command | Control-click **Install GrokRouter.command**, choose **Open**, then confirm **Open**. Do not disable Gatekeeper. |
 | `install Grok Bot 0.30.0 in Applications first` | Put the official app at `/Applications/Grok Bot.app`, open it once, then retry. |
@@ -140,6 +141,7 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | `Action needed` appears | Follow the large instruction in GrokRouter. It continues automatically after the Bot computer is available. |
 | Installation stopped while downloading dependencies | Confirm the Bot computer has internet access, then click **Try installation again**. |
 | Installation stopped with another error | Click **Copy safe diagnostics** and paste the report into a GitHub issue. It excludes credentials, conversations, and Bot files. |
+| You are testing the Windows x64 or Arm64 build | Windows is a source preview, not the supported beginner path. Do not use the Mac Terminal command. Report the exact CI artifact, last installer phase, prior-router history, and complete safe diagnostics. |
 | Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
 | Step 5 says this Bot computer uses a new stock host variant | Beta.45 automatically checks the signed compatibility registry once. Nothing is patched if the exact hash and byte count are still unknown. Click **Copy safe diagnostics** and open the support issue; the complete non-secret fingerprint is included. |

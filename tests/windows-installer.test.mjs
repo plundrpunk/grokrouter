@@ -54,6 +54,15 @@ test("Windows installer exposes safe recovery without retaining secrets", () => 
   assert.match(preload, /grokrouter:copy-diagnostics/);
   assert.match(preload, /grokrouter:open-support/);
   assert.match(main, /This report intentionally excludes credentials, conversations, and Bot files/);
+  for (const diagnosticMarker of [
+    "HOSTSHA",
+    "HOSTBYTES",
+    "CLOUDARCH",
+    "ANCHORS",
+    "PATCHDRYRUN",
+    "SUPPORTEDVERSION",
+  ]) assert.match(main, new RegExp(diagnosticMarker));
+  assert.match(main, /Last installer phase/);
   assert.match(main, /\[REDACTED_KEY\]/);
   assert.doesNotMatch(renderer, /lastInstallPayload|savedInstallPayload/);
 });

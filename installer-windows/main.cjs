@@ -57,10 +57,27 @@ const INSTALL_PHASES = Object.freeze([
   ["COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly."],
 ]);
 
+const INTERESTING_DIAGNOSTIC_WORDS = Object.freeze([
+  "ERROR",
+  "FAILED",
+  "REQUIRED",
+  "MISSING",
+  "NPM",
+  "GROKROUTER",
+  "HOSTSHA",
+  "HOSTBYTES",
+  "CLOUDARCH",
+  "ANCHORS",
+  "PATCHDRYRUN",
+  "SUPPORTEDVERSION",
+  "ROUTERMARKER",
+  "STOCKBACKUP",
+]);
+
 function redactedDiagnosticExcerpt(text) {
   const selected = String(text || "").split(/\r?\n/)
     .map((line) => line.trim())
-    .filter((line) => line && ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER"].some((word) => line.toUpperCase().includes(word)))
+    .filter((line) => line && INTERESTING_DIAGNOSTIC_WORDS.some((word) => line.toUpperCase().includes(word)))
     .slice(-10)
     .map((line) => line.slice(0, 240))
     .join("\n");
@@ -69,13 +86,14 @@ function redactedDiagnosticExcerpt(text) {
     .replace(/sk-[A-Za-z0-9_-]{12,}/gi, "[REDACTED_KEY]");
 }
 
-function makeDiagnosticReport(failure, terminalText = "") {
+function makeDiagnosticReport(failure, terminalText = "", lastInstallerPhase = "unknown") {
   return [
     "GrokRouter safe diagnostic report",
     `Installer: ${app.getVersion()}`,
     `Supported Grok Bot: ${SUPPORTED_GROK_VERSION}`,
     `Windows: ${process.getSystemVersion()}`,
     `Architecture: ${process.arch}`,
+    `Last installer phase: ${lastInstallerPhase}`,
     `Failure: ${failure}`,
     "Terminal excerpt:",
     redactedDiagnosticExcerpt(terminalText),
@@ -525,7 +543,8 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, ins
       if (normalized.includes(`${attemptPrefix}INSTALLFAILED`)) {
         const phase = [...INSTALL_PHASES].reverse().find((candidate) => normalized.includes(`${attemptPrefix}INSTALLFAILED${candidate[0]}`));
         const message = phase?.[2] || "The Bot computer stopped before installation completed.";
-        lastDiagnosticReport = makeDiagnosticReport(message, terminalText);
+        const phaseName = phase?.[0] || INSTALL_PHASES[observedPhase]?.[0] || "unknown";
+        lastDiagnosticReport = makeDiagnosticReport(message, terminalText, phaseName);
         throw new Error(`${message} Copy safe diagnostics for the exact non-secret details.`);
       }
     }
@@ -533,7 +552,8 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, ins
       consecutiveGenericErrors += 1;
       if (consecutiveGenericErrors >= 2) {
         const message = "The Bot terminal stopped before it reported completion.";
-        lastDiagnosticReport = makeDiagnosticReport(message, terminalText);
+        const phaseName = INSTALL_PHASES[observedPhase]?.[0] || "unknown";
+        lastDiagnosticReport = makeDiagnosticReport(message, terminalText, phaseName);
         throw new Error(`${message} Copy safe diagnostics, then try again.`);
       }
     } else {
@@ -541,7 +561,8 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, ins
     }
   }
   const message = "The Bot terminal did not report completion before the timeout.";
-  lastDiagnosticReport = makeDiagnosticReport(message, lastTerminalText);
+  const phaseName = INSTALL_PHASES[observedPhase]?.[0] || "unknown";
+  lastDiagnosticReport = makeDiagnosticReport(message, lastTerminalText, phaseName);
   throw new Error(`${message} Copy safe diagnostics, then try again.`);
 }
 
