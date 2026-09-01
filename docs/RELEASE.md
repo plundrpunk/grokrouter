@@ -28,11 +28,13 @@ If Xcode Command Line Tools are missing, macOS opens Apple's installer. The view
 
 ## Compatibility changes
 
-If Grok Bot updates, refusal is the expected behavior. Do not edit a version string or hash merely to get past the gate. Inspect the untouched stock host, add an exact reviewed manifest, run every automated check, and repeat the complete live gate before claiming support.
+If Grok Bot updates its app version, refusal is the expected behavior. Do not edit a version string merely to get past the gate. Inspect the untouched stock host, add an exact reviewed manifest, run every automated check, and repeat the complete live gate before claiming support.
+
+Rotating 0.30.0 host builds behind the same app version are different: they are accepted by structural verification (`anchorVerifiedHosts` in `patch/manifests/0.30.0.json`) without a registry update. The exact signed list still runs first and remains the way to pin a specific reviewed build. Changing the size band, disabling the policy, or changing the foreign-router marker is an installer release, not a registry-only update.
 
 ## Updating the 0.30.0 signed host registry
 
-Grok may rotate the Bot-computer host while the Mac app still reports 0.30.0. Beta.45 separates the bundled source-seam rules from the signed list of exact stock hash-and-byte-count pairs.
+Grok may rotate the Bot-computer host while the Mac app still reports 0.30.0. Since structural verification landed, a signed registry entry is optional for such hosts; add one when you want a specific build recorded as reviewed, or when a host is rejected structurally but proves stock on inspection.
 
 1. Collect the complete safe report from beta.45. It must contain both SHA halves, byte count, cloud architecture, four anchor counts, and `PATCHDRYRUN=PASS`.
 2. Inspect the untouched stock host through the approved read-only process. Never ask a reporter to post proprietary host source.

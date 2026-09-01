@@ -144,7 +144,7 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | You are testing the Windows x64 or Arm64 build | Windows is a source preview, not the supported beginner path. Do not use the Mac Terminal command. Report the exact CI artifact, last installer phase, prior-router history, and complete safe diagnostics. |
 | Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
-| Step 5 says this Bot computer uses a new stock host variant | Beta.45 automatically checks the signed compatibility registry once. Nothing is patched if the exact hash and byte count are still unknown. Click **Copy safe diagnostics** and open the support issue; the complete non-secret fingerprint is included. |
+| Step 5 says this Bot computer's host did not pass the stock-host checks | GrokRouter accepts a host either from the exact signed list or by structural verification (no router marker, every source anchor exactly once, a read-only patch that passes `node --check`, and a plausible size). If both fail, nothing is patched. If you previously installed OpenGrok or another router, use **Restore Stock Grok Bot** first. Otherwise click **Copy safe diagnostics** and open the support issue; the complete non-secret fingerprint and the reason are included. |
 | The version says beta.45, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
 | Grok Bot answers a router command conversationally, opens its terminal, or offers to install/repair GrokRouter itself | Stop that attempt. The router did not intercept the command. Use the GrokRouter desktop app on the Mac to run Doctor and Repair Router. |
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
@@ -174,14 +174,14 @@ The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.45: 
 
 ### A new stock host variant is not an endless reinstall
 
-Grok can serve several Bot-computer host builds behind the same Grok Bot 0.30.0 Mac app. Beta.45 handles that without guessing:
+Grok serves many slightly different Bot-computer host builds behind the same Grok Bot 0.30.0 Mac app. Every early install report in this repository was the same failure: a genuine stock host whose exact hash was not yet on the list. GrokRouter now accepts a host in two ways, and tells you which one it used:
 
-1. It checks the exact hash and byte count bundled with the installer.
-2. If the host is new, it downloads the small public compatibility registry and verifies its Ed25519 signature with a public key pinned inside GrokRouter.
-3. It retries only when that signed registry contains the exact hash-and-size pair and the bundled source anchors still match exactly once.
-4. If the host is still unknown, it changes nothing and creates a complete safe report containing two SHA halves, byte count, cloud architecture, anchor counts, and a read-only patch syntax result.
+1. **Exact signed list.** The hash and byte count match the bundled manifest or the Ed25519-signed public compatibility registry. This is the historical path and still runs first.
+2. **Structural verification.** The host carries no GrokRouter, legacy, or other-router marker; every required source anchor appears exactly once; a read-only copy of the patch passes `node --check`; and the file size is within the expected band for 0.30.0 hosts. The untouched host is backed up before anything is patched, so **Restore Stock Grok Bot** returns exactly what was running.
 
-Click **Copy safe diagnostics** and submit that report. Do not paste Grok's proprietary host source into GitHub. After a reviewed compatibility entry is published, beta.45 can pick it up through **Try installation again** or **Repair Router**; users do not need another installer build merely to receive the new exact allowlist entry.
+If both checks fail, nothing is patched. The installer creates a complete safe report containing two SHA halves, byte count, cloud architecture, anchor counts, the read-only patch result, the trust tier, and the reason it stopped. Click **Copy safe diagnostics** and submit that report. Do not paste Grok's proprietary host source into GitHub.
+
+To go back to the strict exact-hash-only behavior, set `anchorVerifiedHosts.enabled` to `false` in `patch/manifests/0.30.0.json` before building.
 
 ### `/provider` is missing from the slash menu
 

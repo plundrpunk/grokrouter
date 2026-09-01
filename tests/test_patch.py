@@ -162,6 +162,94 @@ class RouterPatchTests(unittest.TestCase):
         )
         self.assertEqual(result["status"], "dry-run")
 
+    def enable_anchor_verification(self, min_bytes=0, max_bytes=0):
+        self.manifest["anchorVerifiedHosts"] = router_patch.validate_anchor_policy(
+            {"enabled": True, "minBytes": min_bytes, "maxBytes": max_bytes}
+        )
+
+    def test_shipped_manifest_enables_anchor_verified_hosts_within_a_size_band(self):
+        manifest = router_patch.load_manifest(PROJECT_ROOT / "patch" / "manifests" / "0.30.0.json")
+        policy = manifest["anchorVerifiedHosts"]
+        self.assertTrue(policy["enabled"])
+        self.assertLessEqual(policy["minBytes"], 25656693)
+        self.assertGreaterEqual(policy["maxBytes"], 26377223)
+
+    def test_anchor_verified_variant_installs_backs_up_and_restores(self):
+        self.enable_anchor_verification()
+        variant = STOCK_SOURCE + "// rotated stock variant\n"
+        self.host.write_text(variant)
+        report = router_patch.inspect_host(self.host, self.manifest)
+        self.assertEqual(report["status"], "anchor-verified-stock")
+        self.assertEqual(report["hostTrust"], router_patch.TRUST_ANCHOR)
+        self.assertTrue(report["ok"])
+        self.assertIn("HOSTTRUST=ANCHOR-VERIFIED", router_patch.compatibility_report(self.host, self.manifest))
+
+        result = router_patch.install(
+            self.host, self.backup, self.manifest, dry_run=False, allow_unknown=False
+        )
+        self.assertEqual(result["status"], "installed")
+        self.assertEqual(result["stockTrust"], router_patch.TRUST_ANCHOR)
+        self.assertIn(router_patch.MARKER, self.host.read_text())
+        self.assertEqual(self.backup.read_text(), variant)
+
+        health = router_patch.doctor(self.host, self.backup, self.manifest)
+        self.assertTrue(health["ok"])
+        self.assertTrue(health["stockBackupVerified"])
+        self.assertEqual(health["stockBackupTrust"], router_patch.TRUST_ANCHOR)
+
+        restored = router_patch.restore(
+            self.host, self.backup, self.manifest, dry_run=False, allow_unknown=False
+        )
+        self.assertEqual(restored["status"], "restored")
+        self.assertEqual(self.host.read_text(), variant)
+
+    def test_anchor_verification_verdict_is_cached_beside_the_file(self):
+        self.enable_anchor_verification()
+        self.host.write_text(STOCK_SOURCE + "// cached variant\n")
+        first = router_patch.anchor_verification(self.host, self.manifest)
+        self.assertTrue(first["ok"])
+        cache = self.host.with_name(self.host.name + router_patch.TRUST_CACHE_SUFFIX)
+        self.assertTrue(cache.exists())
+        cached = json.loads(cache.read_text())
+        self.assertEqual(cached["result"], first)
+        # A changed file invalidates the cached verdict.
+        self.host.write_text(STOCK_SOURCE.replace("function createMockPromptExecutor", "function wrong"))
+        self.assertFalse(router_patch.anchor_verification(self.host, self.manifest)["ok"])
+
+    def test_backup_follows_the_live_stock_variant(self):
+        self.enable_anchor_verification()
+        self.backup.write_text(STOCK_SOURCE + "// older variant\n")
+        variant = STOCK_SOURCE + "// newer variant\n"
+        self.host.write_text(variant)
+        router_patch.install(self.host, self.backup, self.manifest, dry_run=False, allow_unknown=False)
+        self.assertEqual(self.backup.read_text(), variant)
+
+    def test_anchor_verification_rejects_foreign_router_and_size_band(self):
+        self.enable_anchor_verification()
+        self.host.write_text(STOCK_SOURCE + "// OpenGrok adapter installed here\n")
+        verdict = router_patch.anchor_verification(self.host, self.manifest)
+        self.assertFalse(verdict["ok"])
+        self.assertIn("another router", verdict["reason"])
+        with self.assertRaisesRegex(router_patch.PatchError, "another router"):
+            router_patch.install(self.host, self.backup, self.manifest, dry_run=True, allow_unknown=False)
+
+        self.host.write_text(STOCK_SOURCE + "// tiny\n")
+        self.enable_anchor_verification(min_bytes=10_000_000, max_bytes=20_000_000)
+        verdict = router_patch.anchor_verification(self.host, self.manifest)
+        self.assertFalse(verdict["ok"])
+        self.assertIn("smaller than expected", verdict["reason"])
+        self.assertEqual(verdict["patchDryRun"], "pass")
+        with self.assertRaisesRegex(router_patch.PatchError, "HOSTTRUST=NONE"):
+            router_patch.install(self.host, self.backup, self.manifest, dry_run=True, allow_unknown=False)
+
+    def test_anchor_verification_is_off_unless_the_manifest_enables_it(self):
+        self.host.write_text(STOCK_SOURCE + "// changed\n")
+        verdict = router_patch.anchor_verification(self.host, self.manifest)
+        self.assertFalse(verdict["ok"])
+        self.assertEqual(verdict["patchDryRun"], "pass")
+        self.assertIn("disabled", verdict["reason"])
+        self.assertIsNone(router_patch.host_trust(self.host, self.manifest))
+
     def test_missing_or_duplicate_anchor_is_rejected(self):
         self.host.write_text(STOCK_SOURCE.replace("function createMockPromptExecutor", "function wrong"))
         self.assertEqual(router_patch.inspect_host(self.host, self.manifest)["patchDryRun"], "fail")

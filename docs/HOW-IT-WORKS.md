@@ -16,7 +16,7 @@ YouTube-ready files:
 3. **The chosen AI handles the turn.** The router sends the cleaned conversation and the tools Grok made available for that turn to Codex SDK or OpenRouter.
 4. **The answer returns to the same chat.** You do not move to another app or learn another interface.
 5. **If an action is needed, Grok still does it.** The selected AI can request a computer, file, browser or orchestration tool only when Grok supplied that tool for the turn. Grok's permission layer still applies. The result goes back to the same selected AI, which finishes the answer.
-6. **Recovery is built in.** Installation verifies the exact Grok host, saves a verified original, and can restore the stock inference path later.
+6. **Recovery is built in.** Installation verifies that the Grok host is genuinely stock, saves the untouched original, and can restore the stock inference path later.
 
 ## What happens during installation
 
@@ -26,11 +26,11 @@ The native macOS installer—and the source-preview Windows shell built around t
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.
-5. Inside the Bot computer, it installs pinned runtime dependencies, verifies the exact stock host hash, byte count and source anchors, and saves the stock host under persistent `sand-data` storage. If Grok has rotated to another 0.30.0 stock build, beta.45 checks one signed compatibility registry before refusing it.
+5. Inside the Bot computer, it installs pinned runtime dependencies and verifies the stock host. A host is accepted from the exact signed hash-and-byte-count list, or by structural verification: no router marker, every source anchor exactly once, a read-only patch that passes `node --check`, and a plausible file size. Grok rotates 0.30.0 host builds often, so the structural path is what most installs use. The untouched host is saved under persistent `sand-data` storage before it is patched.
 6. It injects one narrow executor into the known host. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
 7. It restarts the Grok host, verifies a real success marker, closes the diagnostic connection and reopens Grok Bot normally.
 
-If the app version, host hash-and-size pair, registry signature, source anchors, payload checksum, Terminal focus or generated code does not match expectations, installation stops rather than guessing. An unknown host produces a safe fingerprint and a read-only syntax result; Grok host source is never uploaded.
+If the app version, source anchors, payload checksum, registry signature, Terminal focus or generated code does not match expectations, installation stops rather than guessing. A rejected host produces a safe fingerprint, the read-only syntax result, the trust tier, and the reason; Grok host source is never uploaded. The Bot terminal is read back through screenshot OCR, so installer attempt IDs use only characters OCR does not confuse, and the completion timeout restarts whenever a new phase is observed.
 
 ## What happens when you send a message
 

@@ -1,3 +1,15 @@
+# Unreleased
+
+Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.
+
+- Public issues #1 through #5 all failed the same way: a genuine stock Bot-computer host whose SHA-256 was not yet on the signed list. At least seven distinct 0.30.0 host hashes were reported in one day, so an exact allowlist cannot keep up.
+- The host adapter now has a second acceptance tier, **structural verification**: the host carries no GrokRouter, legacy, or other-router marker; every required source anchor appears exactly once; a read-only patch passes `node --check`; and the byte count is within the manifest's band (20–40 MB). The exact signed list still runs first. Both tiers back up the untouched host before patching, and the backup now follows the live stock variant so Restore returns exactly what was running.
+- Doctor, install, and the safe diagnostic report state the trust tier (`HOSTTRUST=EXACT-ALLOWLIST`, `ANCHOR-VERIFIED`, or `NONE`) and, when a host is rejected, the plain reason. Structural verdicts are cached beside the file so the lifecycle watchdog does not re-run the read-only patch every five seconds.
+- The policy lives in `patch/manifests/0.30.0.json` under `anchorVerifiedHosts`; setting `enabled` to `false` restores the strict exact-hash behavior. The development override, restore, repair, and watchdog paths all honor the same rules.
+- The Mac and Windows installers read the Bot terminal through screenshot OCR. Attempt IDs now use only OCR-safe characters (no 0/O, 1/I, 5/S, 8/B, 7/T, 2/Z, 6/G), the failure marker matches on its stable prefix, and common digit/letter confusions are folded before comparison. Real beta.44 reports showed hex IDs like `7E0DBDB8` coming back as `TEODBDB8`, which hid the actual failed phase behind a generic "terminal stopped" message.
+- The completion timeout is now measured from the last observed phase instead of the start, so a slow first-time Codex dependency download no longer times out while it is still making progress.
+- The adapter-phase failure text tells users who previously installed OpenGrok or another router to run Restore Stock Grok Bot first.
+
 # GrokRouter 0.1.0-beta.45
 
 Signed compatibility updates for Grok Bot 0.30.0's rotating Bot-computer hosts.
