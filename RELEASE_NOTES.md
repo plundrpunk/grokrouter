@@ -12,6 +12,8 @@ Signed compatibility updates for Grok Bot 0.30.0's rotating Bot-computer hosts.
 
 Public issues #1 through #4 all report the same fail-closed cause: additional stock host variants are being served behind Grok Bot 0.30.0. Their exact hashes are not added by assertion alone; each remains pending until its complete fingerprint, read-only dry run, reviewed entry, and live acceptance are recorded.
 
+The exact beta.45 Mac lifecycle completed install → verified stock restore → reinstall. The first live pass caught a one-byte error in the historical stock-host manifest instead of bypassing it; the corrected exact byte count was re-signed, refreshed through the public registry path, and pinned by a regression test. Two genuinely new Bots then passed Doctor, native slash discovery, model switching, provider status, exact-once normal inference, deterministic near-miss controls, and per-Bot default isolation. The temporary diagnostic port was closed before Grok Bot relaunched normally.
+
 # GrokRouter 0.1.0-beta.44
 
 Beginner-safe installer recovery for Grok Bot 0.30.0.

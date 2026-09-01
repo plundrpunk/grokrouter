@@ -347,7 +347,7 @@ For the friendly explanation, read [How it works](docs/HOW-IT-WORKS.md). For imp
 
 | Platform | Current evidence |
 | --- | --- |
-| macOS 12+, Apple silicon | The exact beta.44 lifecycle passed install → verified stock restore → reinstall. A genuinely new Bot then passed Doctor, model switching, provider identity, exact-once delivery, slash-control near misses, and second-Bot state isolation. |
+| macOS 12+, Apple silicon | The exact beta.45 lifecycle passed install → verified stock restore → reinstall with the signed exact-host registry. Two genuinely new Bots then passed Doctor, native slash discovery, model switching, provider identity, exact-once delivery, slash-control near misses, and per-Bot state isolation. |
 | Windows 11, x64 and Arm64 | Native Electron installer, exact signed-app/version gate, loopback/noVNC transport, restore path, packaging tests, and both ZIP and Inno Setup architectures build on the Windows CI runner. Native launch/install and live Grok Bot acceptance remain required before a public Windows claim. |
 
 The detailed claim ledger lives in the [test matrix](docs/TEST-MATRIX.md). macOS is the live-verified platform; Windows is a source preview until its native acceptance cycle passes.
@@ -538,7 +538,7 @@ Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritati
 
 Beta.45 keeps beta.44's recoverable installer and adds a signed compatibility registry for Grok's rotating 0.30.0 Bot-computer hosts. Unknown variants trigger one bounded update check, remain untouched unless the exact hash and byte count are signed, and produce a complete non-secret compatibility report with a read-only patch syntax result.
 
-The exact local macOS beta.44 lifecycle completed install → verified stock restore → reinstall. A genuinely new Bot passed Doctor, model switching, provider identity, deterministic near-miss controls, exact-once text delivery, and second-Bot state isolation. The Windows x64 and Arm64 applications build and checksum successfully from current source, but have not yet passed a native Windows install → restore → reinstall → fresh-Bot cycle. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
+The exact local macOS beta.45 lifecycle completed install → verified stock restore → reinstall. The live gate caught and corrected a one-byte historical manifest error before release. Two genuinely new Bots then passed Doctor, native slash discovery, model switching, provider identity, deterministic near-miss controls, exact-once text delivery, and per-Bot state isolation. The Windows x64 and Arm64 applications build and checksum successfully from current source, but have not yet passed a native Windows install → restore → reinstall → fresh-Bot cycle. Full OpenRouter computer/sub-agent parity is not claimed when Grok supplies no actionable outer-tool schemas.
 
 See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and the dated [Independent Review](docs/INDEPENDENT-REVIEW-2026-08-29.md) for the evidence behind every claim.
 
