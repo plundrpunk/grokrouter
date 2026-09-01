@@ -56,6 +56,19 @@ body:
     validations:
       required: true
 
+  - type: dropdown
+    id: host_adapter_result
+    attributes:
+      label: Host adapter result
+      description: Use GrokRouter's Mac-side Run Doctor result. Do not ask Grok Bot to install or repair itself.
+      options:
+        - Patched and verified
+        - stock-or-unknown or no router marker
+        - Unsupported or changed host
+        - I could not complete this check
+    validations:
+      required: true
+
   - type: textarea
     id: safe_diagnostics
     attributes:

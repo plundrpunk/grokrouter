@@ -142,9 +142,32 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | Installation stopped with another error | Click **Copy safe diagnostics** and paste the report into a GitHub issue. It excludes credentials, conversations, and Bot files. |
 | Codex is not signed in | Open GrokRouter, click **Start Codex Sign-in**, and complete the displayed device flow. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
+| The version says beta.44, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
+| Grok Bot answers a router command conversationally, opens its terminal, or offers to install/repair GrokRouter itself | Stop that attempt. The router did not intercept the command. Use the GrokRouter desktop app on the Mac to run Doctor and Repair Router. |
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
 
 If Doctor still reports a failure, copy its complete non-secret output into an [installation support issue](https://github.com/promptadvisers/grokrouter/issues/new?template=installation-failure.yml) or give it to your AI assistant. Never post an API key.
+
+### The version is correct, but the host adapter is not patched
+
+GrokRouter has two pieces that must agree:
+
+1. **Runtime files** contain the provider code and display the GrokRouter version.
+2. **The active host adapter** makes Grok Bot intercept commands such as `/provider` before an ordinary model sees them.
+
+Seeing `0.1.0-beta.44` proves only the first piece. If Doctor reports `stock-or-unknown`, `no router marker`, or `host adapter is not patched`, the runtime exists but the Grok host currently running is stock or was replaced. This is an adapter mismatch—not a request to download a newer version.
+
+Repair it in this exact order:
+
+1. **Stop any installation started by a Grok conversation.** Do not let Grok Bot install, update, patch, or troubleshoot GrokRouter from its own chat or terminal.
+2. On the **Mac**, open `/Applications/Grok Bot.app` and the **GrokRouter desktop app**.
+3. In Grok Bot, select any Bot, click **Open computer**, and leave that computer visible.
+4. In GrokRouter, click **Run Doctor**. If it reports the adapter mismatch on the supported Grok Bot 0.30.0 build, click **Repair Router**.
+5. Wait for GrokRouter to say `Router repaired. Automatic repair is enabled.` Do not close either app while it is working.
+6. After GrokRouter finishes, fully quit and reopen Grok Bot. Create a genuinely new Bot.
+7. Manually type `/router doctor`, then `/provider`, into the new Bot's normal message box.
+
+The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.44: OK` and `/provider` immediately names the selected provider and model. If Grok replies in normal prose, opens a terminal, or offers to repair anything, interception still failed; return to the Mac GrokRouter app and copy **safe diagnostics**.
 
 ### `/provider` is missing from the slash menu
 
@@ -154,13 +177,14 @@ Follow these steps in order. Stop as soon as a step passes.
 
 1. **Type it manually.** Click the Bot's normal message box, type exactly `/provider`, and press Return. Do not select a suggestion and do not ask the Bot in natural language.
 2. **Read the result.** If the reply names `Codex SDK` or `OpenRouter` and a model, routing works. You can keep typing the commands manually; the missing suggestion is only a discovery-menu problem.
-3. **Make sure the test Bot is new.** Create a genuinely new Bot **after** the latest installation, then manually send `/router doctor` followed by `/provider`.
-4. **Replace stale source.** If you installed from a fork, old clone, bookmark, or previously downloaded ZIP, use the pinned beta.44 Terminal command from [Step 2](#2-install-and-open-grokrouter). It downloads the exact official tag into a new temporary folder; it does not depend on your old checkout.
-5. **Reinstall with the Bot computer visible.** Open Grok Bot 0.30.0, select any Bot, click **Open computer**, and leave it open. Open GrokRouter, choose the provider, and click **Install Router**. Follow any large **Action needed** instruction. Do not close either app.
-6. **Wait for both receipts.** The activity log must show a line beginning with `✓ Installed`. It should also say that it verified six unique GrokRouter commands. A spinning indicator, an ordinary Grok reply, or a missing slash suggestion is not an installation receipt.
-7. **Retry the supported way.** If installation stops, use **Try installation again**. If Doctor reports a damaged or replaced host, use **Repair Router**, wait for success, and repeat the new-Bot test.
-8. **Check for a command-name conflict.** GrokRouter does not overwrite a user-created skill with the same name. If Doctor reports a conflict for `provider`, `models`, `model`, `reasoning`, `router`, or `doctor`, rename or remove only that conflicting user-created skill, reinstall, and test again. Never delete Grok Bot files by hand.
-9. **Collect safe evidence.** Click **Copy safe diagnostics** and save the complete report. It excludes credentials, conversations, and private Bot files. Never paste an API key, Codex device code, password, conversation, or private file into an issue or AI chat.
+3. **Identify ordinary Grok behavior.** If Grok answers in normal prose, opens a terminal, or offers to install or repair the router, the command was not intercepted. Stop that attempt and follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched).
+4. **Make sure the test Bot is new.** Create a genuinely new Bot **after** the latest installation, then manually send `/router doctor` followed by `/provider`.
+5. **Replace stale source.** If you installed from a fork, old clone, bookmark, or previously downloaded ZIP, use the pinned beta.44 Terminal command from [Step 2](#2-install-and-open-grokrouter). It downloads the exact official tag into a new temporary folder; it does not depend on your old checkout.
+6. **Reinstall with the Bot computer visible.** Open Grok Bot 0.30.0, select any Bot, click **Open computer**, and leave it open. Open GrokRouter, choose the provider, and click **Install Router**. Follow any large **Action needed** instruction. Do not close either app.
+7. **Wait for both receipts.** The activity log must show a line beginning with `✓ Installed`. It should also say that it verified six unique GrokRouter commands. A spinning indicator, an ordinary Grok reply, or a missing slash suggestion is not an installation receipt.
+8. **Retry the supported way.** If installation stops, use **Try installation again**. If Doctor reports a damaged or replaced host, use **Repair Router**, wait for success, and repeat the new-Bot test.
+9. **Check for a command-name conflict.** GrokRouter does not overwrite a user-created skill with the same name. If Doctor reports a conflict for `provider`, `models`, `model`, `reasoning`, `router`, or `doctor`, rename or remove only that conflicting user-created skill, reinstall, and test again. Never delete Grok Bot files by hand.
+10. **Collect safe evidence.** Click **Copy safe diagnostics** and save the complete report. It excludes credentials, conversations, and private Bot files. Never paste an API key, Codex device code, password, conversation, or private file into an issue or AI chat.
 
 After a repair or reinstall, fully quit and reopen Grok Bot only after GrokRouter finishes. Create another new Bot and manually run:
 
@@ -191,6 +215,8 @@ Each Bot keeps its own provider and model choice.
 
 Use the Codex desktop app on the same Mac as Grok Bot. Give Codex the official repository folder, allow Computer Use when Codex or macOS asks, and paste the prompt below. If Computer Use is unavailable, Codex can still inspect the repository, run safe Terminal checks, and tell you the one UI action it cannot perform.
 
+> **Paste this prompt into Codex on your Mac—never into Grok Bot.** Grok Bot runs inside the environment being repaired. If you give the recovery prompt to Grok Bot, it may try to install or patch the router from the wrong side of the connection.
+
 This prompt authorizes a persistent but bounded troubleshooting loop. It does **not** authorize bypassing compatibility checks, exposing secrets, deleting user data, or modifying Grok Bot by hand.
 
 ```text
@@ -199,6 +225,10 @@ giving me generic instructions. Read README.md and AGENTS.md first, inspect the
 current installation, use the documented recovery actions, and keep testing
 until the acceptance checks below pass or you identify one real external
 blocker that only I can resolve.
+
+You are running in the Codex desktop app on the Mac. Never delegate this repair
+to Grok Bot, paste installer commands into Grok chat, or treat Grok Bot's own
+terminal activity as a successful Mac-side installation.
 
 Official source: https://github.com/promptadvisers/grokrouter
 Required source tag: source-v0.1.0-beta.44
@@ -234,28 +264,34 @@ TROUBLESHOOTING LOOP
 2. Remember that the slash-suggestion menu is not authoritative. Manually type
    /provider in the normal composer. Record whether it returns a deterministic
    provider/model receipt, reaches ordinary model inference, or is ignored.
-3. If the current install is stale or unhealthy, use the pinned official
+   If Grok replies conversationally, opens its terminal, or offers to repair or
+   install anything, stop that attempt: the live host adapter did not intercept
+   the command. A displayed beta.44 runtime version does not override this test.
+3. If the runtime says beta.44 but Doctor reports stock-or-unknown, no router
+   marker, or an unpatched host adapter, use the Mac GrokRouter app's Run Doctor
+   and Repair Router actions. Do not ask Grok Bot to repair itself.
+4. If the current install is stale or otherwise unhealthy, use the pinned official
    beta.44 source installer from README.md. Open Grok Bot, select any Bot, open
    its computer, run GrokRouter's Install Router action, and respond to any
    Action needed state. Wait for the authoritative installed receipt and the
    message verifying six unique GrokRouter commands.
-4. If a recoverable phase fails, use Try installation again. If Doctor reports
+5. If a recoverable phase fails, use Try installation again. If Doctor reports
    a damaged or replaced host, use Repair Router. Use Copy safe diagnostics and
    inspect only the redacted report when you need evidence.
-5. After every successful install or repair, create a genuinely new Bot. Type
+6. After every successful install or repair, create a genuinely new Bot. Type
    these literal commands manually, one at a time:
    /router doctor
    /provider
    /models
-6. Use Computer Use to inspect the slash menu too. If the literal commands work
+7. Use Computer Use to inspect the slash menu too. If the literal commands work
    but a suggestion is absent, report that as a discovery-menu problem, check
    Doctor for a conflicting user skill, restart only after the installer has
    finished, and retest. Do not call the whole router broken merely because the
    suggestion menu is stale.
-7. Send one ordinary exact-text test and make sure it produces one response,
+8. Send one ordinary exact-text test and make sure it produces one response,
    not zero and not duplicates. Create a second new Bot and verify it starts on
    the installer default rather than inheriting the first Bot's model choice.
-8. Repeat the safe install/repair/new-Bot loop until all acceptance checks pass
+9. Repeat the safe install/repair/new-Bot loop until all acceptance checks pass
    or a genuine external blocker remains.
 
 ACCEPTANCE CHECKS
