@@ -341,10 +341,22 @@ if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
   if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
     printf '%s\n' "$ADAPTER_OUTPUT" >&2
     rollback_runtime
-    fail_install "NEW_STOCK_HOST" "This Bot computer needs a reviewed compatibility entry. Nothing was patched. Copy safe diagnostics; the complete host fingerprint is included."
+    fail_install "NEW_STOCK_HOST" "This Bot computer's host did not pass the stock-host checks, so nothing was patched. Copy safe diagnostics; the complete host fingerprint is included."
   fi
 fi
 printf '%s\n' "$ADAPTER_OUTPUT"
+# Tell the desktop installer which trust tier accepted this host. A host that
+# is not on the exact signed list can still be accepted when it carries no
+# router marker, matches every source anchor exactly once, and passes the
+# read-only patch plus node --check. The untouched host is backed up first.
+case "$ADAPTER_OUTPUT" in
+  *'"stockTrust": "anchor-verified"'*)
+    printf 'Host accepted by structural verification (anchor-verified stock host); stock backup saved.\n'
+    ;;
+  *'"stockTrust": "exact-allowlist"'*)
+    printf 'Host accepted from the exact signed compatibility list; stock backup saved.\n'
+    ;;
+esac
 
 # Beta.40 incorrectly treated loose ~/.grok/skills links as native slash-menu
 # registration. Grok 0.30.0 actually reads a per-Bot workflow store. The

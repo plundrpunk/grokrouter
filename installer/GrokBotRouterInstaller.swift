@@ -493,8 +493,23 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Letters and digits that Vision OCR rarely confuses with each other.
+    /// Excluded on purpose: 0/O/D/Q, 1/I/L, 2/Z, 5/S, 6/G, 7/T, 8/B.
+    private static let ocrSafeAlphabet = Array("ACEFHJKMNPRUVWXY349")
+
+    static func makeInstallAttemptID(length: Int = 8) -> String {
+        String((0..<length).map { _ in ocrSafeAlphabet.randomElement()! })
+    }
+
+    /// Fold the digit/letter pairs OCR confuses most so that marker words such
+    /// as INSTALLFAILED still match when a screenshot reads 1NSTALLFA1LED.
+    /// Attempt IDs and sentinels never contain the digits folded here.
+    private static let ocrFolds: [Character: Character] = [
+        "0": "O", "1": "I", "5": "S", "8": "B", "2": "Z", "6": "G"
+    ]
+
     private func normalizedOCR(_ text: String) -> String {
-        text.uppercased().filter { $0.isLetter || $0.isNumber }
+        String(text.uppercased().filter { $0.isLetter || $0.isNumber }.map { Self.ocrFolds[$0] ?? $0 })
     }
 
     private func installPhaseDetails() -> [(marker: String, status: String, failure: String)] {
@@ -504,14 +519,14 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             ("PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."),
             ("INSTALLDEPENDENCIES", "Step 4 of 6 · Preparing pinned dependencies…", "The Bot computer could not prepare the pinned dependencies. On a first Codex install, check its internet connection, then try again."),
             ("ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."),
-            ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "This Bot computer uses a new stock host variant. GrokRouter checked for a signed compatibility update and changed nothing."),
+            ("APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "This Bot computer's Grok host did not pass GrokRouter's stock-host checks, so nothing was changed. If Restore Stock Grok Bot is available, run it first, then try again."),
             ("VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."),
             ("COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly.")
         ]
     }
 
     private func redactedDiagnosticExcerpt(_ text: String) -> String {
-        let interestingWords = ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER", "HOSTSHA", "HOSTBYTES", "CLOUDARCH", "ANCHORS", "SUPPORTEDVERSION"]
+        let interestingWords = ["ERROR", "FAILED", "REQUIRED", "MISSING", "NPM", "GROKROUTER", "HOSTSHA", "HOSTBYTES", "CLOUDARCH", "ANCHORS", "PATCHDRYRUN", "HOSTTRUST", "SUPPORTEDVERSION"]
         let selected = text
             .split(whereSeparator: { $0.isNewline })
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -1160,7 +1175,13 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         var observedPhase = -1
         var consecutiveGenericErrors = 0
         var lastTerminalText = ""
-        for _ in 0..<(timeoutSeconds / 3) {
+        // The timeout is measured from the last visible progress, not from the
+        // start. A slow first-time Codex dependency download still completes
+        // as long as the Bot computer keeps reporting new phases.
+        let ticksPerWindow = max(1, timeoutSeconds / 3)
+        var remainingTicks = ticksPerWindow
+        while remainingTicks > 0 {
+            remainingTicks -= 1
             try await Task.sleep(nanoseconds: 3_000_000_000)
             if let current = try? await targets(client).first(where: { $0.type == "webview" && $0.url.contains("/vnc.html") }),
                current.id != activeTargetID,
@@ -1195,12 +1216,19 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 for (index, phase) in installPhaseDetails().enumerated()
                     where index > observedPhase && normalized.contains("\(attemptPrefix)PHASE\(phase.marker)") {
                     observedPhase = index
+                    remainingTicks = ticksPerWindow
                     updateStatus(phase.status)
                     appendLog(phase.status)
                 }
-                if normalized.contains("\(attemptPrefix)INSTALLFAILED") {
-                    let phase = installPhaseDetails().reversed().first {
+                // Match the failure marker on its OCR-stable prefix. The full
+                // word FAILED has been read as FATLED from real Bot terminals.
+                if normalized.contains("\(attemptPrefix)INSTALLFA") {
+                    var phase = installPhaseDetails().reversed().first {
                         normalized.contains("\(attemptPrefix)INSTALLFAILED\($0.marker)")
+                            || normalized.contains("INSTALLFAILED\($0.marker)")
+                    }
+                    if phase == nil && observedPhase >= 0 {
+                        phase = installPhaseDetails()[observedPhase]
                     }
                     let message = phase?.failure ?? "The Bot computer stopped before installation completed."
                     lastDiagnosticReport = makeDiagnosticReport(failure: message, terminalText: text)
@@ -1366,7 +1394,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let archive = try Data(contentsOf: archiveURL())
         let encoded = archive.base64EncodedString()
         let digest = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
-        let installAttempt = String(UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)).uppercased()
+        let installAttempt = Self.makeInstallAttemptID()
         let installPayload = Data("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n".utf8).base64EncodedString()
         // Short, quote-free commands always return to a usable shell prompt if
         // the VNC target changes mid-transfer. A retry starts from an empty file.

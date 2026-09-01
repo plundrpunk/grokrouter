@@ -52,7 +52,7 @@ const INSTALL_PHASES = Object.freeze([
   ["PREPARERUNTIME", "Step 3 of 6 · Preparing a safe installation…", "The Bot computer could not prepare a temporary installation."],
   ["INSTALLDEPENDENCIES", "Step 4 of 6 · Preparing pinned dependencies…", "The Bot computer could not prepare the pinned dependencies. On a first Codex install, check its internet connection, then try again."],
   ["ACTIVATERUNTIME", "Step 5 of 6 · Activating GrokRouter…", "GrokRouter could not activate the prepared runtime."],
-  ["APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "The verified Grok Bot host did not accept the adapter. The previous runtime was restored."],
+  ["APPLYADAPTER", "Step 5 of 6 · Applying the version-gated router…", "This Bot computer's Grok host did not pass GrokRouter's stock-host checks, so nothing was changed. If Restore Stock Grok Bot is available, run it first, then try again."],
   ["VERIFYINSTALL", "Step 6 of 6 · Verifying the installation…", "The installed router did not pass its final health check."],
   ["COMPLETE", "Step 6 of 6 · Reconnecting Grok Bot…", "GrokRouter finished but Grok Bot did not reconnect cleanly."],
 ]);
@@ -69,6 +69,7 @@ const INTERESTING_DIAGNOSTIC_WORDS = Object.freeze([
   "CLOUDARCH",
   "ANCHORS",
   "PATCHDRYRUN",
+  "HOSTTRUST",
   "SUPPORTEDVERSION",
   "ROUTERMARKER",
   "STOCKBACKUP",
@@ -437,8 +438,22 @@ async function screenshotText(client, sessionID) {
   return recognized.data?.text || "";
 }
 
+// Letters and digits that OCR rarely confuses with each other. Excluded on
+// purpose: 0/O/D/Q, 1/I/L, 2/Z, 5/S, 6/G, 7/T, 8/B. Hex attempt IDs such as
+// 7E0DBDB8 have come back from real Bot terminals as 7EODBDB8 / TEODBDB8.
+const OCR_SAFE_ALPHABET = "ACEFHJKMNPRUVWXY349";
+const OCR_FOLDS = Object.freeze({ 0: "O", 1: "I", 5: "S", 8: "B", 2: "Z", 6: "G" });
+
+function makeInstallAttemptID(length = 8) {
+  const bytes = crypto.randomBytes(length);
+  return Array.from(bytes, (byte) => OCR_SAFE_ALPHABET[byte % OCR_SAFE_ALPHABET.length]).join("");
+}
+
+// Fold the digit/letter pairs OCR confuses most so marker words such as
+// INSTALLFAILED still match when a screenshot reads 1NSTALLFA1LED. Attempt IDs
+// and sentinels never contain the digits folded here.
 function normalizeOCR(value) {
-  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/[015826]/g, (digit) => OCR_FOLDS[digit]);
 }
 
 async function waitForTerminalPrompt(client, sessionID, attempts = 8) {
@@ -518,7 +533,10 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, ins
   let observedPhase = -1;
   let consecutiveGenericErrors = 0;
   let lastTerminalText = "";
-  const deadline = Date.now() + timeoutSeconds * 1_000;
+  // The timeout is measured from the last visible progress, not from the
+  // start. A slow first-time Codex dependency download still completes as
+  // long as the Bot computer keeps reporting new phases.
+  let deadline = Date.now() + timeoutSeconds * 1_000;
   while (Date.now() < deadline) {
     await delay(3_000);
     const current = (await targets(client).catch(() => [])).find((item) => item.type === "webview" && item.url.includes("/vnc.html"));
@@ -536,12 +554,17 @@ async function waitForSentinel(sentinel, client, initialVNC, timeoutSeconds, ins
       INSTALL_PHASES.forEach((phase, index) => {
         if (index > observedPhase && normalized.includes(`${attemptPrefix}PHASE${phase[0]}`)) {
           observedPhase = index;
+          deadline = Date.now() + timeoutSeconds * 1_000;
           setStatus(true, phase[1]);
           log(phase[1]);
         }
       });
-      if (normalized.includes(`${attemptPrefix}INSTALLFAILED`)) {
-        const phase = [...INSTALL_PHASES].reverse().find((candidate) => normalized.includes(`${attemptPrefix}INSTALLFAILED${candidate[0]}`));
+      // Match the failure marker on its OCR-stable prefix; the full word
+      // FAILED has been read as FATLED from real Bot terminals.
+      if (normalized.includes(`${attemptPrefix}INSTALLFA`)) {
+        const phase = [...INSTALL_PHASES].reverse().find((candidate) => (
+          normalized.includes(`${attemptPrefix}INSTALLFAILED${candidate[0]}`) || normalized.includes(`INSTALLFAILED${candidate[0]}`)
+        )) || INSTALL_PHASES[observedPhase] || null;
         const message = phase?.[2] || "The Bot computer stopped before installation completed.";
         const phaseName = phase?.[0] || INSTALL_PHASES[observedPhase]?.[0] || "unknown";
         lastDiagnosticReport = makeDiagnosticReport(message, terminalText, phaseName);
@@ -653,7 +676,7 @@ async function installRouter(executable, rawOptions) {
     const archive = fs.readFileSync(payloadPath());
     const encoded = archive.toString("base64");
     const digest = crypto.createHash("sha256").update(archive).digest("hex");
-    const installAttempt = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const installAttempt = makeInstallAttemptID();
     const installPayload = Buffer.from("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n").toString("base64");
     const chunks = [];
     for (let index = 0; index < encoded.length; index += 1_000) chunks.push(encoded.slice(index, index + 1_000));

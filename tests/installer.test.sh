@@ -88,7 +88,16 @@ grep -q 'installAttempt: installAttempt' "$PROJECT_ROOT/installer/GrokBotRouterI
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'anchor-verified stock host' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'HOSTSHA1=' "$PROJECT_ROOT/patch/router_patch.py"
+grep -q 'HOSTTRUST=' "$PROJECT_ROOT/patch/router_patch.py"
+grep -q '"anchorVerifiedHosts"' "$PROJECT_ROOT/patch/manifests/0.30.0.json"
+grep -q 'makeInstallAttemptID' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'ocrSafeAlphabet = Array("ACEFHJKMNPRUVWXY349")' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+! grep -q 'UUID().uuidString.replacingOccurrences(of: "-", with: "").prefix(8)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'remainingTicks = ticksPerWindow' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'INSTALLFA"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q '"HOSTTRUST"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'signed-compatibility-registry-refreshed' "$PROJECT_ROOT/remote/grokbot-router-watchdog"
 grep -q 'Try installation again' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Open support issue' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -213,6 +222,68 @@ TEST_BACKUP="$TEMPORARY/host-main.cjs.stock"
 TEST_RUNTIME="$TEMPORARY/runtime"
 TEST_BIN="$TEMPORARY/bin"
 TEST_GROK_SKILLS="$TEMPORARY/grok-skills"
+
+# Structural verification: the fixture hash is not on the exact list, so the
+# adapter must be accepted through anchor verification (no development
+# override) when the manifest policy permits the fixture's size, and refused
+# with a complete fingerprint when the policy is disabled.
+ANCHOR_RUNTIME="$TEMPORARY/anchor-runtime"
+ANCHOR_HOST="$TEMPORARY/anchor-host-main.cjs"
+ANCHOR_BACKUP="$TEMPORARY/anchor-host-main.cjs.stock"
+ANCHOR_MANIFEST="$TEMPORARY/anchor-manifest.json"
+STRICT_MANIFEST="$TEMPORARY/strict-manifest.json"
+python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$ANCHOR_MANIFEST" "$STRICT_MANIFEST" <<'PY'
+import json
+import sys
+
+manifest = json.load(open(sys.argv[1]))
+manifest["anchorVerifiedHosts"] = {"enabled": True, "minBytes": 0, "maxBytes": 0}
+json.dump(manifest, open(sys.argv[2], "w"))
+manifest["anchorVerifiedHosts"] = {"enabled": False}
+json.dump(manifest, open(sys.argv[3], "w"))
+PY
+cp "$HOST_FIXTURE" "$ANCHOR_HOST"
+mkdir -p "$ANCHOR_RUNTIME"
+STRICT_FAILURE="$(ROUTER_PATCH_HOST="$ANCHOR_HOST" \
+ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
+ROUTER_PATCH_MANIFEST="$STRICT_MANIFEST" \
+ROUTER_BIN_DIR="$TEMPORARY/anchor-bin" \
+ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
+ROUTER_INSTALL_ATTEMPT=STRICT9 \
+bash "$PAYLOAD/remote/install.sh" \
+  --install-root "$ANCHOR_RUNTIME" \
+  --providers openrouter \
+  --no-restart 2>&1 || true)"
+grep -q 'GROKROUTER_STRICT9_INSTALL_FAILED_APPLY_ADAPTER_NEW_STOCK_HOST' <<<"$STRICT_FAILURE"
+grep -q 'HOSTTRUST=NONE' <<<"$STRICT_FAILURE"
+grep -q 'PATCHDRYRUN=PASS' <<<"$STRICT_FAILURE"
+cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
+[[ ! -e "$ANCHOR_BACKUP" ]]
+ROUTER_PATCH_HOST="$ANCHOR_HOST" \
+ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
+ROUTER_PATCH_MANIFEST="$ANCHOR_MANIFEST" \
+ROUTER_BIN_DIR="$TEMPORARY/anchor-bin" \
+ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
+ROUTER_INSTALL_ATTEMPT=ANCHOR9 \
+bash "$PAYLOAD/remote/install.sh" \
+  --install-root "$ANCHOR_RUNTIME" \
+  --providers openrouter \
+  --no-restart \
+  >"$TEMPORARY/install-anchor.log"
+grep -q 'GROKROUTER_ANCHOR9_PHASE_COMPLETE' "$TEMPORARY/install-anchor.log"
+grep -q 'anchor-verified stock host' "$TEMPORARY/install-anchor.log"
+grep -q '"stockBackupTrust": "anchor-verified"' "$TEMPORARY/install-anchor.log"
+grep -q 'GROKBOT_MODEL_ROUTER_V45' "$ANCHOR_HOST"
+cmp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
+python3 "$ANCHOR_RUNTIME/patch/router_patch.py" \
+  --restore \
+  --host "$ANCHOR_HOST" \
+  --backup "$ANCHOR_BACKUP" \
+  --manifest "$ANCHOR_MANIFEST" \
+  --json \
+  >/dev/null
+cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
+
 cp "$HOST_FIXTURE" "$TEST_HOST"
 mkdir -p "$TEST_RUNTIME"
 printf '%s\n' '{"provider":"openrouter","openRouterModels":["openai/gpt-5.2","legacy/removed-model"]}' > "$TEST_RUNTIME/provider.json"
