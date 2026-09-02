@@ -1170,8 +1170,18 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
       reasoning: { effort: config[definition.reasoningKey] || "medium" },
       ...(config.adapterSessionId ? { session_id: config.adapterSessionId } : {}),
     } : {}),
-    ...(provider === "openai" && ["minimal", "low", "medium", "high", "xhigh"].includes(config[definition.reasoningKey])
-      ? { reasoning_effort: config[definition.reasoningKey] }
+    // OpenAI's Chat Completions endpoint rejects function tools combined with a
+    // reasoning effort for the gpt-5.6 family (400: "set reasoning_effort to
+    // 'none'"). Grok offers tools on almost every turn, so send "none" whenever
+    // tools are present and the configured effort only on tool-free turns.
+    ...(provider === "openai"
+      ? {
+        reasoning_effort: offeredTools.length
+          ? "none"
+          : (["minimal", "low", "medium", "high", "xhigh"].includes(config[definition.reasoningKey])
+            ? config[definition.reasoningKey]
+            : "medium"),
+      }
       : {}),
   };
   const baseUrl = providerBaseUrl(config, provider);

@@ -486,10 +486,36 @@ test("OpenAI uses only the official endpoint and keeps its key out of results", 
     assert.equal(request.url, "https://api.openai.com/v1/chat/completions");
     assert.equal(request.init.headers.Authorization, `Bearer ${TEST_OPENAI_KEY}`);
     assert.equal(request.init.headers["X-Title"], undefined);
-    assert.equal(request.body.reasoning_effort, "medium");
+    assert.equal(request.body.reasoning_effort, "none");
     assert.match(request.body.messages[0].content, /active provider is OpenAI/);
     assert.equal(result.toolCalls[0].toolName, "Computer");
     assert.equal(JSON.stringify(result).includes(TEST_OPENAI_KEY), false);
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
+test("OpenAI keeps the configured reasoning effort on tool-free turns", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = TEST_OPENAI_KEY;
+  let request;
+  try {
+    await runOpenAI(
+      { openAIModel: "gpt-5.6-sol", openAIReasoning: "high" },
+      [user("Reply with the word ok")],
+      [],
+      async (url, init) => {
+        request = { url, init, body: JSON.parse(init.body) };
+        return new Response(JSON.stringify({
+          model: "gpt-5.6-sol",
+          choices: [{ message: { content: "ok" } }],
+          usage: { prompt_tokens: 3, completion_tokens: 1 },
+        }), { status: 200 });
+      },
+    );
+    assert.equal(request.body.reasoning_effort, "high");
+    assert.equal(request.body.tools, undefined);
   } finally {
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;
