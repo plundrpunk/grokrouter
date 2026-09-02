@@ -12,15 +12,19 @@ const isHighRiskPath = (filename) =>
   filename.startsWith("scripts/") ||
   filename === "AGENTS.md" ||
   filename === "Install GrokRouter.command" ||
+  filename === "LICENSE.md" ||
+  filename === "README.md" ||
+  filename === "SECURITY.md" ||
+  filename === "docs/FRESH-BOT-ACCEPTANCE.md" ||
+  filename === "docs/RELEASE.md" ||
+  filename === "docs/TEST-MATRIX.md" ||
   filename === "package.json" ||
   filename.endsWith("package-lock.json");
 
 const isDocumentationPath = (filename) =>
   filename.startsWith("docs/") ||
-  filename === "README.md" ||
   filename === "RELEASE_NOTES.md" ||
-  filename === "SECURITY.md" ||
-  filename === "LICENSE.md";
+  (!filename.includes("/") && filename.endsWith(".md"));
 
 export function classifyRisk(files) {
   const totals = files.reduce(

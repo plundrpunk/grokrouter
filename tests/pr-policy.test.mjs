@@ -10,7 +10,7 @@ import {
 const changed = (filename, additions = 1, deletions = 0) => ({ filename, additions, deletions });
 
 test("documentation-only changes are low risk", () => {
-  assert.equal(classifyRisk([changed("README.md"), changed("docs/HOW-IT-WORKS.md")]).risk, "risk:low");
+  assert.equal(classifyRisk([changed("RELEASE_NOTES.md"), changed("docs/HOW-IT-WORKS.md")]).risk, "risk:low");
 });
 
 test("tests and skills require normal review", () => {
@@ -24,6 +24,9 @@ test("runtime, installer, dependency, agent, and workflow changes are high risk"
     "installer/GrokBotRouterInstaller.swift",
     "runtime/package-lock.json",
     "AGENTS.md",
+    "README.md",
+    "SECURITY.md",
+    "docs/RELEASE.md",
     ".github/workflows/ci.yml",
   ]) {
     assert.equal(classifyRisk([changed(filename)]).risk, "risk:high", filename);

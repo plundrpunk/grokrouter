@@ -6,9 +6,9 @@ The `main` branch is protected by required pull requests and required status che
 
 The `pr-risk-classifier` job owns exactly one risk label on every pull request:
 
-- `risk:low`: documentation-only changes. No additional approval label is required.
+- `risk:low`: documentation-only changes outside the install, release, acceptance, security, and legal trust boundary. No additional approval label is required.
 - `risk:normal`: tests, skills, or ordinary project metadata. A human must apply `reviewed-ok`.
-- `risk:high`: runtime, installer, patching, compatibility, dependency, script, or GitHub workflow changes; also changes larger than 20 files or 500 changed lines. A human must apply `human-approved`.
+- `risk:high`: runtime, installer, patching, compatibility, dependency, script, GitHub workflow, agent instruction, primary install/release guidance, acceptance evidence, or legal changes; also changes larger than 20 files or 500 changed lines. A human must apply `human-approved`.
 
 The classifier removes `reviewed-ok` and `human-approved` whenever new commits are pushed. The approval must be applied again after reviewing the latest commit.
 
