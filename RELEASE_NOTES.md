@@ -6,9 +6,11 @@ Direct OpenAI support and a fail-closed provider/installer security boundary.
 - Refactored OpenRouter and OpenAI through an explicit provider registry. Their official base URLs are fixed, provider secret paths are fixed to Grok Bot Secrets, and reinstall discards unknown inherited configuration instead of carrying it into a privileged runtime.
 - Added a development llama.cpp adapter restricted to an unauthenticated loopback endpoint inside the Bot computer. It is not exposed in the beginner installer UI, and live model/tool capability remains pending.
 - Unknown Grok hosts are never patched, backed up, repaired, or restored based on structural similarity. Only an exact SHA-256-and-byte-count pair from the bundled or Ed25519-signed compatibility registry authorizes mutation; structural checks remain diagnostic-only.
+- Narrowed foreign-router detection to the symbols OpenGrok actually injects. Stock Grok Bot now ships official `OpenGrokBotUserComputer` RPC names, so matching the product name alone produced a false foreign-router diagnosis.
 - The macOS installer now verifies Grok Bot's exact bundle ID and Anysphere Team ID. Both platform installers use a random loopback diagnostic port, verify its process ownership, and validate the returned browser WebSocket endpoint before passing provider credentials.
+- Encoded the installer fallback sentinel so terminal OCR cannot mistake the visible shell command for a real failure. Safe diagnostic excerpts now retain up to 24 relevant lines.
 - Disabled the remote self-bootstrap path. Source installation builds only from the checkout the user selected and verified.
-- Beta.47 automated tests pass locally; install → restore → reinstall and fresh-Bot provider proofs are still required before any new live capability claim.
+- Beta.47 automated tests pass locally. The reviewed 27,734,440-byte stock host completed an exact-gated install, verified backup/Doctor, native-command registration, and deterministic OpenAI ↔ OpenRouter switching. Restore, a genuinely new Bot, and paid provider inference are still required before any broader live capability claim.
 
 # GrokRouter 0.1.0-beta.46
 

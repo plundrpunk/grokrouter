@@ -553,7 +553,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 let upper = line.uppercased()
                 return !line.isEmpty && interestingWords.contains(where: upper.contains)
             }
-            .suffix(10)
+            .suffix(24)
             .map { String($0.prefix(240)) }
             .joined(separator: "\n")
         guard !selected.isEmpty else { return "No safe terminal excerpt was available." }
@@ -1344,8 +1344,16 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 // word FAILED has been read as FATLED from real Bot terminals.
                 if normalized.contains("\(attemptPrefix)INSTALLFA") {
                     var phase = installPhaseDetails().reversed().first {
-                        normalized.contains("\(attemptPrefix)INSTALLFAILED\($0.marker)")
-                            || normalized.contains("INSTALLFAILED\($0.marker)")
+                        normalized.contains("\(attemptPrefix)INSTALLFA\($0.marker)")
+                            || normalized.contains("INSTALLFA\($0.marker)")
+                    }
+                    // Some OCR frames split or distort the failure word while
+                    // preserving the phase name. Prefer the latest visible
+                    // phase over an older observed phase in that case.
+                    if phase == nil {
+                        phase = installPhaseDetails().reversed().first {
+                            normalized.contains($0.marker)
+                        }
                     }
                     if phase == nil && observedPhase >= 0 {
                         phase = installPhaseDetails()[observedPhase]
@@ -1525,6 +1533,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let digest = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
         let installAttempt = Self.makeInstallAttemptID()
         let installPayload = Data("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n".utf8).base64EncodedString()
+        // Keep the current attempt's failure sentinel out of the visible shell
+        // command. OCR watches the terminal while this command is running; a
+        // literal sentinel in the command text looks identical to real output.
+        let failurePrefixPayload = Data(
+            "GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_".utf8
+        ).base64EncodedString()
         // Short, quote-free commands always return to a usable shell prompt if
         // the VNC target changes mid-transfer. A retry starts from an empty file.
         var encodedChunks: [String] = []
@@ -1547,7 +1561,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openai-model \(openAIModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; echo GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_$code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openai-model \(openAIModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePrefixPayload) | base64 -d; printf '%s\\n' \"$code\"; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)

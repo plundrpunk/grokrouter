@@ -221,7 +221,7 @@ class RouterPatchTests(unittest.TestCase):
 
     def test_anchor_verification_rejects_foreign_router_and_size_band(self):
         self.enable_anchor_verification()
-        self.host.write_text(STOCK_SOURCE + "// OpenGrok adapter installed here\n")
+        self.host.write_text(STOCK_SOURCE + "// applyProviderReasoningControls\n")
         verdict = router_patch.anchor_verification(self.host, self.manifest)
         self.assertFalse(verdict["ok"])
         self.assertIn("another router", verdict["reason"])
@@ -236,6 +236,13 @@ class RouterPatchTests(unittest.TestCase):
         self.assertEqual(verdict["patchDryRun"], "pass")
         with self.assertRaisesRegex(router_patch.PatchError, "HOSTTRUST=NONE"):
             router_patch.install(self.host, self.backup, self.manifest, dry_run=True)
+
+    def test_stock_opengrok_rpc_names_are_not_foreign_router_markers(self):
+        self.enable_anchor_verification()
+        self.host.write_text(STOCK_SOURCE + "// OpenGrokBotUserComputerRequest\n")
+        verdict = router_patch.anchor_verification(self.host, self.manifest)
+        self.assertTrue(verdict["ok"])
+        self.assertEqual(verdict["patchDryRun"], "pass")
 
     def test_anchor_verification_is_off_unless_the_manifest_enables_it(self):
         self.host.write_text(STOCK_SOURCE + "// changed\n")
