@@ -1,0 +1,246 @@
+name: PR Governance
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    name: pr-risk-classifier
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    outputs:
+      risk: ${{ steps.classify.outputs.risk }}
+    steps:
+      - name: Compute and apply authoritative risk label
+        id: classify
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        with:
+          script: |
+            const pull = context.payload.pull_request;
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pull.number,
+              per_page: 100,
+            });
+
+            const totals = files.reduce(
+              (sum, file) => ({
+                additions: sum.additions + file.additions,
+                deletions: sum.deletions + file.deletions,
+                lines: sum.lines + file.additions + file.deletions,
+              }),
+              { additions: 0, deletions: 0, lines: 0 },
+            );
+
+            const isHighRiskPath = (filename) =>
+              filename.startsWith(".github/") ||
+              filename.startsWith("compatibility/") ||
+              filename.startsWith("installer/") ||
+              filename.startsWith("installer-windows/") ||
+              filename.startsWith("patch/") ||
+              filename.startsWith("remote/") ||
+              filename.startsWith("runtime/") ||
+              filename.startsWith("scripts/") ||
+              filename === "Install GrokRouter.command" ||
+              filename === "package.json" ||
+              filename.endsWith("package-lock.json");
+
+            const isDocumentationPath = (filename) =>
+              filename.startsWith("docs/") ||
+              filename === "README.md" ||
+              filename === "RELEASE_NOTES.md" ||
+              filename === "SECURITY.md" ||
+              filename === "LICENSE.md";
+
+            const highRiskFiles = files.filter((file) => isHighRiskPath(file.filename));
+            let risk = "risk:normal";
+            const reasons = [];
+
+            if (files.length > 20 || totals.lines > 500) {
+              risk = "risk:high";
+              reasons.push(`large change (${files.length} files, ${totals.lines} changed lines)`);
+            }
+            if (highRiskFiles.length > 0) {
+              risk = "risk:high";
+              reasons.push(`security-sensitive paths: ${highRiskFiles.slice(0, 8).map((file) => file.filename).join(", ")}`);
+            }
+            if (risk !== "risk:high" && files.length > 0 && files.every((file) => isDocumentationPath(file.filename))) {
+              risk = "risk:low";
+              reasons.push("documentation-only change");
+            }
+            if (reasons.length === 0) {
+              reasons.push("ordinary tests, skills, or project metadata change");
+            }
+
+            const riskLabels = new Set(["risk:low", "risk:normal", "risk:high"]);
+            const approvalLabels = new Set(["reviewed-ok", "human-approved"]);
+            const currentLabels = pull.labels.map((label) => label.name);
+            const nextLabels = currentLabels.filter((label) => !riskLabels.has(label));
+
+            if (context.payload.action === "synchronize") {
+              for (let index = nextLabels.length - 1; index >= 0; index -= 1) {
+                if (approvalLabels.has(nextLabels[index])) nextLabels.splice(index, 1);
+              }
+            }
+            nextLabels.push(risk);
+
+            const unchanged =
+              nextLabels.length === currentLabels.length &&
+              nextLabels.every((label) => currentLabels.includes(label));
+            if (!unchanged) {
+              await github.rest.issues.setLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pull.number,
+                labels: nextLabels,
+              });
+            }
+
+            core.setOutput("risk", risk);
+            core.notice(`Computed ${risk}: ${reasons.join("; ")}`);
+            await core.summary
+              .addHeading("PR risk classification")
+              .addList([
+                `Risk: ${risk}`,
+                `Changed files: ${files.length}`,
+                `Changed lines: ${totals.lines} (+${totals.additions}/-${totals.deletions})`,
+                ...reasons.map((reason) => `Reason: ${reason}`),
+              ])
+              .write();
+
+  gate:
+    name: pr-merge-gate
+    needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - name: Enforce risk and human-approval policy
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          COMPUTED_RISK: ${{ needs.classify.outputs.risk }}
+        with:
+          script: |
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const labels = pull.labels.map((label) => label.name);
+            const riskLabels = ["risk:low", "risk:normal", "risk:high"];
+            const appliedRiskLabels = riskLabels.filter((label) => labels.includes(label));
+            const errors = [];
+
+            if (pull.draft) errors.push("Draft pull requests cannot merge.");
+            if (appliedRiskLabels.length !== 1) {
+              errors.push(`Exactly one risk label is required (${riskLabels.join(", ")}).`);
+            }
+
+            const risk = appliedRiskLabels[0];
+            if (risk && risk !== process.env.COMPUTED_RISK) {
+              errors.push(`Applied risk ${risk} does not match computed risk ${process.env.COMPUTED_RISK}.`);
+            }
+            const requiredApproval =
+              risk === "risk:normal" ? "reviewed-ok" :
+              risk === "risk:high" ? "human-approved" : null;
+
+            if (requiredApproval && !labels.includes(requiredApproval)) {
+              errors.push(`${risk} requires the ${requiredApproval} label.`);
+            } else if (requiredApproval) {
+              const events = await github.paginate(github.rest.issues.listEvents, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pull.number,
+                per_page: 100,
+              });
+              const approvalEvent = events
+                .filter((event) => event.event === "labeled" && event.label?.name === requiredApproval)
+                .at(-1);
+              const actor = approvalEvent?.actor;
+              if (!actor || actor.type !== "User" || actor.login.endsWith("[bot]")) {
+                errors.push(`${requiredApproval} must be applied by a human GitHub user.`);
+              }
+            }
+
+            await core.summary
+              .addHeading("PR merge gate")
+              .addList([
+                `Risk: ${risk || "missing or ambiguous"}`,
+                `Required approval: ${requiredApproval || "none"}`,
+                `Result: ${errors.length === 0 ? "passed" : "blocked"}`,
+                ...errors.map((error) => `Blocker: ${error}`),
+              ])
+              .write();
+
+            if (errors.length > 0) core.setFailed(errors.join(" "));
+
+  automerge:
+    name: pr-automerge
+    needs: [classify, gate]
+    if: always() && needs.classify.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Queue eligible pull request for squash merge
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+        env:
+          GATE_RESULT: ${{ needs.gate.result }}
+        with:
+          script: |
+            const { data: pull } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+            });
+            const eligible = process.env.GATE_RESULT === "success" && !pull.draft;
+
+            if (!eligible) {
+              if (pull.auto_merge) {
+                await github.graphql(
+                  `mutation($pullRequestId: ID!) {
+                    disablePullRequestAutoMerge(input: {pullRequestId: $pullRequestId}) {
+                      pullRequest { number }
+                    }
+                  }`,
+                  { pullRequestId: pull.node_id },
+                );
+                core.notice("Auto-merge disabled until the risk and approval gate is satisfied.");
+              } else {
+                core.notice("PR is not yet eligible for auto-merge.");
+              }
+              return;
+            }
+
+            if (pull.auto_merge) {
+              core.notice("PR is already queued for auto-merge.");
+              return;
+            }
+
+            await github.graphql(
+              `mutation($pullRequestId: ID!) {
+                enablePullRequestAutoMerge(input: {
+                  pullRequestId: $pullRequestId,
+                  mergeMethod: SQUASH
+                }) {
+                  pullRequest { number }
+                }
+              }`,
+              { pullRequestId: pull.node_id },
+            );
+            core.notice(`Queued PR #${pull.number} for squash auto-merge.`);
