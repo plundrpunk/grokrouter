@@ -1,17 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPOSITORY="promptadvisers/grokrouter"
-SOURCE_REF="source-v0.1.0-beta.46"
 SOURCE_ROOT=""
-TEMP_SOURCE=""
-
-cleanup() {
-  if [[ -n "$TEMP_SOURCE" && -d "$TEMP_SOURCE" ]]; then
-    rm -rf "$TEMP_SOURCE"
-  fi
-}
-trap cleanup EXIT
 
 fail() {
   printf '\nGrokRouter could not be installed: %s\n' "$1" >&2
@@ -34,14 +24,7 @@ fi
 if [[ -n "$SCRIPT_DIR" && -f "$SCRIPT_DIR/../installer/GrokBotRouterInstaller.swift" ]]; then
   SOURCE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 else
-  TEMP_SOURCE="$(mktemp -d -t grokrouter-source.XXXXXX)"
-  ARCHIVE="$TEMP_SOURCE/grokrouter.tar.gz"
-  printf 'Downloading GrokRouter source from GitHub...\n'
-  /usr/bin/curl --fail --silent --show-error --location \
-    "https://github.com/$REPOSITORY/archive/refs/tags/$SOURCE_REF.tar.gz" \
-    --output "$ARCHIVE"
-  /usr/bin/tar -xzf "$ARCHIVE" -C "$TEMP_SOURCE"
-  SOURCE_ROOT="$(find "$TEMP_SOURCE" -mindepth 1 -maxdepth 1 -type d -name 'grokrouter-*' -print -quit)"
+  fail "run this installer only from a source checkout you have verified; remote self-bootstrap is disabled"
 fi
 
 [[ -n "$SOURCE_ROOT" && -f "$SOURCE_ROOT/installer/GrokBotRouterInstaller.swift" ]] \

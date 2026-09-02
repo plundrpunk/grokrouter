@@ -1,3 +1,15 @@
+# GrokRouter 0.1.0-beta.47
+
+Direct OpenAI support and a fail-closed provider/installer security boundary.
+
+- Added direct OpenAI Chat Completions with native function calls, per-Bot provider/model state, protected `OPENAI_API_KEY` storage, installer controls on macOS and Windows, management CLI status/Doctor output, and mock request/response coverage.
+- Refactored OpenRouter and OpenAI through an explicit provider registry. Their official base URLs are fixed, provider secret paths are fixed to Grok Bot Secrets, and reinstall discards unknown inherited configuration instead of carrying it into a privileged runtime.
+- Added a development llama.cpp adapter restricted to an unauthenticated loopback endpoint inside the Bot computer. It is not exposed in the beginner installer UI, and live model/tool capability remains pending.
+- Unknown Grok hosts are never patched, backed up, repaired, or restored based on structural similarity. Only an exact SHA-256-and-byte-count pair from the bundled or Ed25519-signed compatibility registry authorizes mutation; structural checks remain diagnostic-only.
+- The macOS installer now verifies Grok Bot's exact bundle ID and Anysphere Team ID. Both platform installers use a random loopback diagnostic port, verify its process ownership, and validate the returned browser WebSocket endpoint before passing provider credentials.
+- Disabled the remote self-bootstrap path. Source installation builds only from the checkout the user selected and verified.
+- Beta.47 automated tests pass locally; install → restore → reinstall and fresh-Bot provider proofs are still required before any new live capability claim.
+
 # GrokRouter 0.1.0-beta.46
 
 Installs on rotating Grok Bot 0.30.0 host builds without a per-hash approval.

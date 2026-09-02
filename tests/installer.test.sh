@@ -36,6 +36,8 @@ rm -f "$TAMPERED_REGISTRY"
 
 STRUCTURED_FAILURE="$(ROUTER_INSTALL_ATTEMPT=TEST1234 bash "$PROJECT_ROOT/remote/install.sh" --not-a-real-option 2>&1 || true)"
 grep -q 'GROKROUTER_TEST1234_INSTALL_FAILED_OPTIONS_UNKNOWN_OPTION' <<<"$STRUCTURED_FAILURE"
+PROVIDER_LIST_FAILURE="$(ROUTER_INSTALL_ATTEMPT=PROVIDERS9 bash "$PROJECT_ROOT/remote/install.sh" --provider codex --providers codex, --no-restart 2>&1 || true)"
+grep -q 'GROKROUTER_PROVIDERS9_INSTALL_FAILED_OPTIONS_INVALID_PROVIDERS' <<<"$PROVIDER_LIST_FAILURE"
 PREFLIGHT_FAILURE="$(PATH=/usr/bin:/bin:/sbin ROUTER_INSTALL_ATTEMPT=PREF123 bash "$PROJECT_ROOT/remote/install.sh" --no-restart 2>&1 || true)"
 grep -q 'GROKROUTER_PREF123_PHASE_PREFLIGHT' <<<"$PREFLIGHT_FAILURE"
 grep -q 'GROKROUTER_PREF123_INSTALL_FAILED_PREFLIGHT_MISSING_COMMAND' <<<"$PREFLIGHT_FAILURE"
@@ -46,7 +48,16 @@ grep -q 'GROKROUTER_PREF123_INSTALL_FAILED_PREFLIGHT_MISSING_COMMAND' <<<"$PREFL
   -framework AppKit \
   -framework Vision \
   -framework CryptoKit \
+  -framework Security \
   "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+
+grep -q 'SecStaticCodeCheckValidity' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'private let grokBundleIdentifier = "com.anysphere.sand"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'private let grokTeamIdentifier = "DCNK4UB866"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'certificate leaf\[subject.OU\].*grokTeamIdentifier' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'chooseDiagnosticPort' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'owners == \[expectedPID\]' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'result.host == "127.0.0.1"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 
 grep -q 'typeRemoteCommandsResilient' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'let timeout = DispatchWorkItem' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -88,7 +99,12 @@ grep -q 'installAttempt: installAttempt' "$PROJECT_ROOT/installer/GrokBotRouterI
 grep -q 'INSTALLFAILED' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Copy safe diagnostics' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'complete host fingerprint is included' "$PROJECT_ROOT/remote/install.sh"
-grep -q 'anchor-verified stock host' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'Structural checks are diagnostic-only and never authorize writes' "$PROJECT_ROOT/remote/install.sh"
+! grep -Eq 'ROUTER_ALLOW_UNKNOWN_HOST|--allow-unknown-host' \
+  "$PROJECT_ROOT/patch/router_patch.py" \
+  "$PROJECT_ROOT/remote/install.sh" \
+  "$PROJECT_ROOT/remote/grokbot-router" \
+  "$PROJECT_ROOT/remote/grokbot-router-watchdog"
 grep -q 'HOSTSHA1=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q 'HOSTTRUST=' "$PROJECT_ROOT/patch/router_patch.py"
 grep -q '"anchorVerifiedHosts"' "$PROJECT_ROOT/patch/manifests/0.30.0.json"
@@ -128,7 +144,7 @@ grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'labelWithString: "GROK BOT 0.30.0"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'PRIVATE BETA' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
-grep -Fq 'contentRect: NSRect(x: 0, y: 0, width: 780, height: 838)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -Fq 'contentRect: NSRect(x: 0, y: 0, width: 780, height: 930)' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -Fq 'NSStackView(views: [hero, modelCard, installCard, statusCard, activityLabel, scroll])' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'InstallerCardView' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'window.title = "GrokRouter"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -141,15 +157,15 @@ grep -q 'ROUTER_BUILD_APP_ONLY' "$PROJECT_ROOT/scripts/build-macos-app.sh"
 grep -q 'GROKROUTER_APPLICATIONS_DIR' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'GROKROUTER_NO_OPEN' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -q 'xcode-select --install' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'SOURCE_REF="source-v0.1.0-beta.46"' "$PROJECT_ROOT/scripts/install-macos.sh"
-grep -q 'source-v0.1.0-beta.46/scripts/install-macos.sh' "$PROJECT_ROOT/README.md"
+grep -q 'remote self-bootstrap is disabled' "$PROJECT_ROOT/scripts/install-macos.sh"
+! grep -q 'github.com/.*/archive/refs' "$PROJECT_ROOT/scripts/install-macos.sh"
 grep -Fq 'The slash menu is not the test.' "$PROJECT_ROOT/README.md"
 grep -Fq 'Fastest recovery: let Codex test the apps for you' "$PROJECT_ROOT/README.md"
 grep -Fq 'If Computer Use is available' "$PROJECT_ROOT/README.md"
 grep -Fq 'prove it in a genuinely new Bot created after the final install or repair' "$PROJECT_ROOT/README.md"
 grep -Fq 'The version is correct, but the host adapter is not patched' "$PROJECT_ROOT/README.md"
 grep -Fq 'Paste this prompt into Codex on your Mac—never into Grok Bot.' "$PROJECT_ROOT/README.md"
-grep -Fq 'A displayed beta.46 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
+grep -Fq 'A displayed beta.47 runtime version does not override this test.' "$PROJECT_ROOT/README.md"
 grep -Fq 'id: install_source' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: literal_provider_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
 grep -Fq 'id: host_adapter_result' "$PROJECT_ROOT/.github/ISSUE_TEMPLATE/installation-failure.yml"
@@ -160,6 +176,7 @@ grep -q 'CFBundleIconFile' "$PROJECT_ROOT/installer/Info.plist"
 grep -q '"format": "jpeg"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q '"quality": 55' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'isValidOpenRouterKey' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q '!value.hasPrefix("sk-or-v1-")' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'previousSelection' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'relaunchGrokNormallyIfNeeded' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Closing the temporary diagnostic port' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
@@ -169,7 +186,7 @@ grep -q 'GROKROUTER_%s_INSTALL_FAILED_%s_%s' "$PROJECT_ROOT/remote/install.sh"
 grep -q -- '--fetch-retries=3' "$PROJECT_ROOT/remote/install.sh"
 grep -q -- '--fetch-timeout=30000' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'Reusing the already verified pinned Codex runtime' "$PROJECT_ROOT/remote/install.sh"
-grep -q 'OpenRouter-only setup needs no dependency download' "$PROJECT_ROOT/remote/install.sh"
+grep -q 'Provider-only setup needs no Codex dependency download' "$PROJECT_ROOT/remote/install.sh"
 grep -q 'await import("@openai/codex-sdk")' "$PROJECT_ROOT/runtime/run-provider.mjs"
 grep -q '"X-Title": "GrokRouter"' "$PROJECT_ROOT/runtime/run-provider.mjs"
 ! grep -q 'Prompt Advisers\|promptadvisers.com' "$PROJECT_ROOT/runtime/run-provider.mjs"
@@ -222,11 +239,11 @@ TEST_BACKUP="$TEMPORARY/host-main.cjs.stock"
 TEST_RUNTIME="$TEMPORARY/runtime"
 TEST_BIN="$TEMPORARY/bin"
 TEST_GROK_SKILLS="$TEMPORARY/grok-skills"
+TEST_MANIFEST="$TEMPORARY/test-exact-manifest.json"
 
-# Structural verification: the fixture hash is not on the exact list, so the
-# adapter must be accepted through anchor verification (no development
-# override) when the manifest policy permits the fixture's size, and refused
-# with a complete fingerprint when the policy is disabled.
+# Structural verification is diagnostic-only. The fixture hash is not on the
+# exact signed list, so enabling the legacy manifest flag must not authorize
+# a write or a backup.
 ANCHOR_RUNTIME="$TEMPORARY/anchor-runtime"
 ANCHOR_HOST="$TEMPORARY/anchor-host-main.cjs"
 ANCHOR_BACKUP="$TEMPORARY/anchor-host-main.cjs.stock"
@@ -252,6 +269,7 @@ ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
 ROUTER_INSTALL_ATTEMPT=STRICT9 \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$ANCHOR_RUNTIME" \
+  --provider openrouter \
   --providers openrouter \
   --no-restart 2>&1 || true)"
 grep -q 'GROKROUTER_STRICT9_INSTALL_FAILED_APPLY_ADAPTER_NEW_STOCK_HOST' <<<"$STRICT_FAILURE"
@@ -259,7 +277,7 @@ grep -q 'HOSTTRUST=NONE' <<<"$STRICT_FAILURE"
 grep -q 'PATCHDRYRUN=PASS' <<<"$STRICT_FAILURE"
 cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
 [[ ! -e "$ANCHOR_BACKUP" ]]
-ROUTER_PATCH_HOST="$ANCHOR_HOST" \
+ANCHOR_FAILURE="$(ROUTER_PATCH_HOST="$ANCHOR_HOST" \
 ROUTER_PATCH_BACKUP="$ANCHOR_BACKUP" \
 ROUTER_PATCH_MANIFEST="$ANCHOR_MANIFEST" \
 ROUTER_BIN_DIR="$TEMPORARY/anchor-bin" \
@@ -267,29 +285,31 @@ ROUTER_GROK_SKILLS_ROOT="$TEMPORARY/anchor-grok-skills" \
 ROUTER_INSTALL_ATTEMPT=ANCHOR9 \
 bash "$PAYLOAD/remote/install.sh" \
   --install-root "$ANCHOR_RUNTIME" \
+  --provider openrouter \
   --providers openrouter \
-  --no-restart \
-  >"$TEMPORARY/install-anchor.log"
-grep -q 'GROKROUTER_ANCHOR9_PHASE_COMPLETE' "$TEMPORARY/install-anchor.log"
-grep -q 'anchor-verified stock host' "$TEMPORARY/install-anchor.log"
-grep -q '"stockBackupTrust": "anchor-verified"' "$TEMPORARY/install-anchor.log"
-grep -q 'GROKBOT_MODEL_ROUTER_V45' "$ANCHOR_HOST"
-cmp "$HOST_FIXTURE" "$ANCHOR_BACKUP"
-python3 "$ANCHOR_RUNTIME/patch/router_patch.py" \
-  --restore \
-  --host "$ANCHOR_HOST" \
-  --backup "$ANCHOR_BACKUP" \
-  --manifest "$ANCHOR_MANIFEST" \
-  --json \
-  >/dev/null
+  --no-restart 2>&1 || true)"
+grep -q 'GROKROUTER_ANCHOR9_INSTALL_FAILED_APPLY_ADAPTER_NEW_STOCK_HOST' <<<"$ANCHOR_FAILURE"
+grep -q 'HOSTTRUST=NONE' <<<"$ANCHOR_FAILURE"
 cmp "$HOST_FIXTURE" "$ANCHOR_HOST"
+[[ ! -e "$ANCHOR_BACKUP" ]]
 
 cp "$HOST_FIXTURE" "$TEST_HOST"
+python3 - "$PAYLOAD/patch/manifests/0.30.0.json" "$TEST_MANIFEST" "$HOST_FIXTURE" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+manifest = json.load(open(sys.argv[1]))
+host = Path(sys.argv[3])
+manifest["stockHosts"] = [{"sha256": hashlib.sha256(host.read_bytes()).hexdigest(), "bytes": host.stat().st_size}]
+json.dump(manifest, open(sys.argv[2], "w"))
+PY
 mkdir -p "$TEST_RUNTIME"
-printf '%s\n' '{"provider":"openrouter","openRouterModels":["openai/gpt-5.2","legacy/removed-model"]}' > "$TEST_RUNTIME/provider.json"
+printf '%s\n' '{"provider":"openrouter","openRouterModels":["openai/gpt-5.2","legacy/removed-model"],"openRouterBaseUrl":"https://attacker.invalid/v1","openRouterSecretsPath":"/tmp/stolen.json","openAIBaseUrl":"https://attacker.invalid/v1","openAISecretsPath":"/tmp/stolen-too.json","workingDirectory":"/tmp/attacker"}' > "$TEST_RUNTIME/provider.json"
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
-ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
 ROUTER_BIN_DIR="$TEST_BIN" \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 ROUTER_INSTALL_ATTEMPT=SUCCESS45 \
@@ -336,6 +356,11 @@ import sys
 config = json.load(open(sys.argv[1]))
 assert "openai/gpt-5.2" not in config["openRouterModels"]
 assert "legacy/removed-model" not in config["openRouterModels"]
+assert "openRouterBaseUrl" not in config
+assert "openRouterSecretsPath" not in config
+assert "openAIBaseUrl" not in config
+assert "openAISecretsPath" not in config
+assert config["workingDirectory"] == "/workspace"
 assert config["openRouterModels"] == [
     "anthropic/claude-sonnet-4.6",
     "openai/gpt-5.6-sol",
@@ -361,7 +386,7 @@ with open(path, "w") as output:
 PY
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
-ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
 ROUTER_BIN_DIR="$TEST_BIN" \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 bash "$PAYLOAD/remote/install.sh" \
@@ -376,24 +401,23 @@ grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 [[ ! -e "$TEST_GROK_SKILLS/provider" && ! -L "$TEST_GROK_SKILLS/provider" ]]
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
-  --allow-unknown-host \
   --host "$TEST_HOST" \
   --backup "$TEST_BACKUP" \
-  --manifest "$TEST_RUNTIME/patch/manifests/0.30.0.json" \
+  --manifest "$TEST_MANIFEST" \
   --json \
   >/dev/null
 cmp "$HOST_FIXTURE" "$TEST_HOST"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
-ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
 ROUTER_WATCHDOG_ENABLED=0 \
 "$TEST_BIN/grokbot-router" repair >/dev/null
 grep -q 'GROKBOT_MODEL_ROUTER_V45' "$TEST_HOST"
 
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
-ROUTER_ALLOW_UNKNOWN_HOST=1 \
+ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
 ROUTER_WATCHDOG_ENABLED=0 \
 ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
 "$TEST_BIN/grokbot-router" uninstall >/dev/null
