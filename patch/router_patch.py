@@ -31,9 +31,13 @@ LEGACY_BACKUPS = (
     Path("/home/box/sand-host/host-main.cjs.grok-sdk-adapter.prepatch"),
 )
 DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
-# Another public router also rewrites the same host. Its marker must never be
-# mistaken for a stock host, so diagnostics identify it explicitly.
-FOREIGN_MARKER = re.compile(r"opengrok|open_grok", re.IGNORECASE)
+# Another public router also rewrites the same host. Detect the symbols its
+# host patch actually injects instead of its product name: current stock Grok
+# Bot bundles official protobuf types such as OpenGrokBotUserComputerRequest.
+# The exact-hash allowlist remains the only authority for a host write.
+FOREIGN_MARKER = re.compile(
+    r"resolvedTopLevelMaxMode|resolvedTopLevelParameters|applyProviderReasoningControls"
+)
 TRUST_EXACT = "exact-allowlist"
 
 
