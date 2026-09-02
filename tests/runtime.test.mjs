@@ -27,6 +27,7 @@ import {
   runLlamaCpp,
   runOpenAI,
   runOpenRouter,
+  providerSafeToolCallId,
   runTurn,
   userTurnFingerprint,
 } from "../runtime/run-provider.mjs";
@@ -519,6 +520,68 @@ test("OpenAI keeps the configured reasoning effort on tool-free turns", async ()
   } finally {
     if (previous === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
+test("over-long Grok tool call ids are shortened consistently for OpenAI-compatible providers", async () => {
+  const longId = `grokbot-router-tool-${"a".repeat(70)}`;
+  const shortId = providerSafeToolCallId(longId);
+  assert.ok(shortId.length <= 64);
+  assert.equal(providerSafeToolCallId(longId), shortId);
+  assert.equal(providerSafeToolCallId("call_short"), "call_short");
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = TEST_OPENAI_KEY;
+  let request;
+  try {
+    await runOpenAI(
+      { openAIModel: "gpt-5.6-sol", openAIReasoning: "medium" },
+      [
+        user("Run the tool"),
+        { role: "assistant", content: [{ type: "tool-call", toolCallId: longId, toolName: "Computer", args: {} }] },
+        { role: "tool", content: [{ type: "tool-result", toolCallId: longId, result: "done" }] },
+      ],
+      [{ name: "Computer", inputSchema: { type: "object" } }],
+      async (url, init) => {
+        request = { url, init, body: JSON.parse(init.body) };
+        return new Response(JSON.stringify({
+          model: "gpt-5.6-sol",
+          choices: [{ message: { content: "ok" } }],
+          usage: { prompt_tokens: 3, completion_tokens: 1 },
+        }), { status: 200 });
+      },
+    );
+    const assistant = request.body.messages.find((message) => message.role === "assistant" && message.tool_calls);
+    const toolResult = request.body.messages.find((message) => message.role === "tool");
+    assert.equal(assistant.tool_calls[0].id, shortId);
+    assert.equal(toolResult.tool_call_id, shortId);
+    assert.equal(JSON.stringify(request.body).includes(longId), false);
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
+test("OpenRouter omits reasoning on tool turns for openai/* models only", async () => {
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({
+      model: "x", choices: [{ message: { content: "ok" } }], usage: { prompt_tokens: 1, completion_tokens: 1 },
+    }), { status: 200 });
+  };
+  const tools = [{ name: "Computer", inputSchema: { type: "object" } }];
+  try {
+    await runOpenRouter({ openRouterModel: "openai/gpt-5.6-sol", openRouterReasoning: "medium" }, [user("hi")], tools, fetchImpl);
+    await runOpenRouter({ openRouterModel: "openai/gpt-5.6-sol", openRouterReasoning: "medium" }, [user("hi")], [], fetchImpl);
+    await runOpenRouter({ openRouterModel: "anthropic/claude-sonnet-4.6", openRouterReasoning: "medium" }, [user("hi")], tools, fetchImpl);
+    assert.equal(bodies[0].reasoning, undefined);
+    assert.deepEqual(bodies[1].reasoning, { effort: "medium" });
+    assert.deepEqual(bodies[2].reasoning, { effort: "medium" });
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
   }
 });
 

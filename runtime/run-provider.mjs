@@ -685,7 +685,36 @@ async function openRouterToolResults(message) {
   return converted;
 }
 
-function sanitizeOpenRouterConversation(messages) {
+// OpenAI rejects tool_call ids longer than 64 characters ("Invalid
+// 'messages[n].tool_calls[0].id': string too long"). Grok's host can hand back
+// ids well past that, so map every over-long id to a deterministic short form
+// on both the assistant tool_calls and the matching tool results.
+const PROVIDER_TOOL_CALL_ID_MAX = 64;
+
+export function providerSafeToolCallId(id) {
+  if (typeof id !== "string" || id.length <= PROVIDER_TOOL_CALL_ID_MAX) return id;
+  return `call_${createHash("sha256").update(id).digest("hex").slice(0, 40)}`;
+}
+
+function withProviderSafeToolCallIds(messages) {
+  return messages.map((message) => {
+    if (message?.role === "tool" && typeof message.tool_call_id === "string") {
+      return { ...message, tool_call_id: providerSafeToolCallId(message.tool_call_id) };
+    }
+    if (message?.role === "assistant" && Array.isArray(message.tool_calls)) {
+      return {
+        ...message,
+        tool_calls: message.tool_calls.map((call) => (
+          typeof call?.id === "string" ? { ...call, id: providerSafeToolCallId(call.id) } : call
+        )),
+      };
+    }
+    return message;
+  });
+}
+
+function sanitizeOpenRouterConversation(rawMessages) {
+  const messages = withProviderSafeToolCallIds(rawMessages);
   const assistantCallIds = new Set();
   const toolResultIds = new Set();
   for (const message of messages) {
@@ -1167,7 +1196,12 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
     } : {}),
     stream: false,
     ...(provider === "openrouter" ? {
-      reasoning: { effort: config[definition.reasoningKey] || "medium" },
+      // OpenAI-hosted models reject tools + reasoning on chat completions
+      // (see the openai branch below); OpenRouter surfaces that as an opaque
+      // "Provider returned error", so omit reasoning on tool turns for openai/*.
+      ...(offeredTools.length && /^openai\//i.test(String(model))
+        ? {}
+        : { reasoning: { effort: config[definition.reasoningKey] || "medium" } }),
       ...(config.adapterSessionId ? { session_id: config.adapterSessionId } : {}),
     } : {}),
     // OpenAI's Chat Completions endpoint rejects function tools combined with a
