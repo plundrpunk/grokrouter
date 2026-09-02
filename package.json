@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:runtime && npm run test:patch && npm run test:installer && npm run test:windows",
+    "test": "npm run test:policy && npm run test:runtime && npm run test:patch && npm run test:installer && npm run test:windows",
+    "test:policy": "node --test tests/pr-policy.test.mjs",
     "test:runtime": "node --test tests/runtime.test.mjs",
     "test:patch": "python3 -m unittest tests/test_patch.py",
     "test:installer": "bash tests/installer.test.sh",
