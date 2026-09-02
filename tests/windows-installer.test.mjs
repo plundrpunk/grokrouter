@@ -21,8 +21,15 @@ test("Windows installer version matches the shared release version", () => {
 test("Windows installer keeps the exact compatibility and local-only gates", () => {
   assert.match(main, /SUPPORTED_GROK_VERSION = "0\.30\.0"/);
   assert.match(main, /metadata\.Status !== "Valid"/);
-  assert.match(main, /127\.0\.0\.1:\$\{CDP_PORT\}/);
+  assert.match(main, /SUPPORTED_GROK_SIGNER_THUMBPRINTS = new Set\(\[\]\)/);
+  assert.match(main, /SignerCertificate\.Thumbprint/);
+  assert.match(main, /reviewed certificate list/);
+  assert.match(main, /127\.0\.0\.1:\$\{diagnosticPort\}/);
   assert.match(main, /--remote-debugging-address=127\.0\.0\.1/);
+  assert.match(main, /chooseDiagnosticPort/);
+  assert.match(main, /Get-NetTCPConnection/);
+  assert.match(main, /endpoint\.hostname !== "127\.0\.0\.1"/);
+  assert.match(main, /endpoint\.pathname\.startsWith\("\/devtools\/browser\/"\)/);
   assert.doesNotMatch(main, /ROUTER_ALLOW_UNKNOWN_HOST/);
   assert.doesNotMatch(main, /shell:\s*true/);
 });
@@ -79,12 +86,16 @@ test("Windows restore explains delayed native command cleanup", () => {
   assert.match(main, /Waiting for Grok Bot's shared command library before stock restore/);
 });
 
-test("Windows renderer is isolated from Node and never stores the OpenRouter key", () => {
+test("Windows renderer is isolated from Node and never stores provider keys", () => {
   assert.match(main, /contextIsolation: true/);
   assert.match(main, /nodeIntegration: false/);
   assert.match(main, /sandbox: true/);
   assert.match(preload, /contextBridge\.exposeInMainWorld/);
   assert.match(renderer, /elements\.openRouterKey\.value = ""/);
+  assert.match(renderer, /elements\.openAIKey\.value = ""/);
+  assert.match(main, /OPENAI_API_KEY/);
+  assert.match(main, /OPENROUTER_API_KEY/);
+  assert.match(main, /Unsupported provider secret requested/);
   assert.doesNotMatch(renderer, /localStorage|sessionStorage/);
   assert.match(html, /type="password"/);
   assert.match(html, /Content-Security-Policy/);

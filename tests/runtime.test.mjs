@@ -21,8 +21,11 @@ import {
   nativeWorkflowControlText,
   normalizeTools,
   openRouterMessages,
+  providerBaseUrl,
   recoveredTextualOpenRouterToolCalls,
   runCodex,
+  runLlamaCpp,
+  runOpenAI,
   runOpenRouter,
   runTurn,
   userTurnFingerprint,
@@ -31,6 +34,7 @@ import {
 
 const user = (text) => ({ role: "user", content: [{ type: "text", text }] });
 const TEST_OPENROUTER_KEY = ["sk", "or", "v1", "syntheticfixture0000000000000000"].join("-");
+const TEST_OPENAI_KEY = ["sk", "proj", "syntheticfixture000000000000000000000000"].join("-");
 
 test("extracts router controls only from exact or pure group-addressed input", () => {
   assert.equal(addressedRouterControlText("/provider"), "/provider");
@@ -456,6 +460,114 @@ test("OpenRouter uses a secret without returning it and preserves function calls
     if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = previous;
   }
+});
+
+test("OpenAI uses only the official endpoint and keeps its key out of results", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = TEST_OPENAI_KEY;
+  let request;
+  try {
+    const result = await runOpenAI(
+      { openAIModel: "gpt-5.6-sol", openAIReasoning: "medium" },
+      [user("Use the Computer tool")],
+      [{ name: "Computer", inputSchema: { type: "object" } }],
+      async (url, init) => {
+        request = { url, init, body: JSON.parse(init.body) };
+        return new Response(JSON.stringify({
+          model: "gpt-5.6-sol",
+          choices: [{ message: {
+            content: "",
+            tool_calls: [{ id: "call-openai", function: { name: "Computer", arguments: "{\"action\":\"screenshot\"}" } }],
+          } }],
+          usage: { prompt_tokens: 7, completion_tokens: 2 },
+        }), { status: 200 });
+      },
+    );
+    assert.equal(request.url, "https://api.openai.com/v1/chat/completions");
+    assert.equal(request.init.headers.Authorization, `Bearer ${TEST_OPENAI_KEY}`);
+    assert.equal(request.init.headers["X-Title"], undefined);
+    assert.equal(request.body.reasoning_effort, "medium");
+    assert.match(request.body.messages[0].content, /active provider is OpenAI/);
+    assert.equal(result.toolCalls[0].toolName, "Computer");
+    assert.equal(JSON.stringify(result).includes(TEST_OPENAI_KEY), false);
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
+test("OpenAI refuses an OpenRouter credential before making a request", async () => {
+  const previous = process.env.OPENAI_API_KEY;
+  process.env.OPENAI_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  try {
+    await assert.rejects(
+      () => runOpenAI(
+        { openAIModel: "gpt-5.6-sol" },
+        [user("hello")],
+        [],
+        async () => { requests += 1; throw new Error("must not request"); },
+      ),
+      /OPENAI_API_KEY is present but does not have a valid shape/,
+    );
+    assert.equal(requests, 0);
+  } finally {
+    if (previous === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previous;
+  }
+});
+
+test("fixed provider endpoints cannot be redirected by inherited configuration", async () => {
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requested = false;
+  try {
+    assert.throws(
+      () => providerBaseUrl({ openRouterBaseUrl: "https://attacker.invalid/v1" }, "openrouter"),
+      /fixed official API endpoint/,
+    );
+    await assert.rejects(
+      runOpenRouter(
+        { openRouterBaseUrl: "https://attacker.invalid/v1" },
+        [user("hello")],
+        [],
+        async () => { requested = true; throw new Error("request should not run"); },
+      ),
+      /fixed official API endpoint/,
+    );
+    assert.equal(requested, false);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+  }
+});
+
+test("llama.cpp uses only an unauthenticated loopback OpenAI-compatible endpoint", async () => {
+  let request;
+  const result = await runLlamaCpp(
+    { llamaCppModel: "local", llamaCppBaseUrl: "http://127.0.0.1:8080/v1" },
+    [user("hello")],
+    [],
+    async (url, init) => {
+      request = { url, init };
+      return new Response(JSON.stringify({
+        model: "local",
+        choices: [{ message: { content: "LOCAL_OK", tool_calls: [] } }],
+      }), { status: 200 });
+    },
+  );
+  assert.equal(result.text, "LOCAL_OK");
+  assert.equal(request.url, "http://127.0.0.1:8080/v1/chat/completions");
+  assert.equal(request.init.headers.Authorization, undefined);
+  assert.throws(
+    () => providerBaseUrl({ llamaCppBaseUrl: "https://remote.invalid/v1" }, "llamacpp"),
+    /limited to an unauthenticated loopback endpoint/,
+  );
+  assert.throws(
+    () => providerBaseUrl({ llamaCppBaseUrl: "http://localhost:8080/v1" }, "llamacpp"),
+    /limited to an unauthenticated loopback endpoint/,
+  );
+  assert.equal(providerBaseUrl({ llamaCppBaseUrl: "http://[::1]:8080/v1" }, "llamacpp"), "http://[::1]:8080/v1");
 });
 
 test("recovers one offered dynamic call when a provider prints tool markup as text", async () => {
@@ -896,7 +1008,7 @@ test("OpenRouter rejects a placeholder credential before making a request", asyn
           throw new Error("request should not run");
         },
       ),
-      /present but does not look like a valid sk-or-v1 key/,
+      /present but does not have a valid shape/,
     );
     assert.equal(requested, false);
   } finally {
@@ -965,7 +1077,7 @@ test("a new Bot automatic greeting cannot wander into dynamic tools", async () =
   }
 });
 
-test("OpenRouter reports an invalid key stored in Grok Secrets", async () => {
+test("OpenRouter rejects inherited custom secret-store paths", async () => {
   const previous = process.env.OPENROUTER_API_KEY;
   delete process.env.OPENROUTER_API_KEY;
   const root = await mkdtemp(join(tmpdir(), "grok-router-invalid-key-"));
@@ -979,7 +1091,7 @@ test("OpenRouter reports an invalid key stored in Grok Secrets", async () => {
         [],
         async () => { throw new Error("request should not run"); },
       ),
-      /present but does not look like a valid sk-or-v1 key/,
+      /custom secret-store paths are not permitted/,
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1059,6 +1171,45 @@ test("per-Bot state is isolated and atomically persisted", async () => {
     const files = (await readdir(join(root, "states"))).filter((name) => name.endsWith(".json"));
     assert.equal(files.length, 2);
     for (const file of files) JSON.parse(await readFile(join(root, "states", file), "utf8"));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("provider controls switch through the explicit OpenAI-compatible registry", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-provider-registry-"));
+  const config = {
+    provider: "codex",
+    providers: ["codex", "openai", "openrouter", "llamacpp"],
+    openAIModel: "gpt-5.6-sol",
+    openRouterModel: "anthropic/claude-sonnet-4.6",
+    llamaCppModel: "local",
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  try {
+    const openAI = await runTurn({
+      config,
+      messages: [user("/provider openai")],
+      sessionOptions: { botId: "provider-registry-bot" },
+    });
+    assert.equal(openAI.provider, "openai");
+    assert.match(openAI.text, /OpenAI \(gpt-5\.6-sol\)/);
+
+    const llamaCpp = await runTurn({
+      config,
+      messages: [user("/provider llamacpp")],
+      sessionOptions: { botId: "provider-registry-bot" },
+    });
+    assert.equal(llamaCpp.provider, "llamacpp");
+    assert.match(llamaCpp.text, /llama\.cpp \(local\)/);
+
+    const status = await runTurn({
+      config,
+      messages: [user("/provider")],
+      sessionOptions: { botId: "provider-registry-bot" },
+    });
+    assert.match(status.text, /llama\.cpp is active/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1310,7 +1461,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.46: OK/);
+    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.47: OK/);
     assert.equal(nativeDoctor.control, true);
 
     const nativeProvider = await runTurn({
@@ -1338,7 +1489,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
     const nearMisses = [
       ["/Provider", /OpenRouter is active/],
       ["/Router   Doctor", /Router 0\.1\.0-beta\./],
-      ["/router foo", /Router command not understood/],
+      ["/router foo", /Provider .foo. is not enabled/],
       ["/provider open router", /Router command not understood/],
       ["/reasoning MAX", /Router command not understood/],
       ["unlisted/model-id", /not in this bot's configured list/],
@@ -2037,7 +2188,7 @@ test("runner rejects oversized stdin indirectly through a normal exported turn c
       sessionOptions: { botId: "help-test" },
     });
     assert.equal(result.ok, true);
-    assert.match(result.text, /\/provider codex\|openrouter/);
+    assert.match(result.text, /\/provider codex/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

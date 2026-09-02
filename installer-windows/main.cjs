@@ -3,6 +3,7 @@ const { spawn, execFile } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const http = require("node:http");
+const net = require("node:net");
 const path = require("node:path");
 const { promisify } = require("node:util");
 const WebSocket = require("ws");
@@ -10,8 +11,13 @@ const { createWorker } = require("tesseract.js");
 
 const execFileAsync = promisify(execFile);
 const SUPPORTED_GROK_VERSION = "0.30.0";
-const CDP_PORT = 19222;
+// Windows remains a source preview until the official publisher certificate
+// has been captured from a trusted installer and pinned here. A merely valid
+// Authenticode signature is not sufficient identity for a secret-bearing CDP
+// session.
+const SUPPORTED_GROK_SIGNER_THUMBPRINTS = new Set([]);
 const CODEX_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
+const OPENAI_MODELS = new Set(["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]);
 const OPENROUTER_MODELS = new Set([
   "anthropic/claude-sonnet-4.6",
   "openai/gpt-5.6-sol",
@@ -24,6 +30,8 @@ const OPENROUTER_MODELS = new Set([
 let mainWindow = null;
 let busy = false;
 let diagnosticsLaunched = false;
+let diagnosticPort = 0;
+let diagnosticExecutable = "";
 let ocrWorkerPromise = null;
 let lastDiagnosticReport = "";
 
@@ -242,7 +250,7 @@ async function locateAndValidateGrok() {
   const command = [
     `$file = Get-Item -LiteralPath '${escaped}'`,
     `$signature = Get-AuthenticodeSignature -LiteralPath '${escaped}'`,
-    `[pscustomobject]@{Version=$file.VersionInfo.ProductVersion;Status=[string]$signature.Status} | ConvertTo-Json -Compress`,
+    `[pscustomobject]@{Version=$file.VersionInfo.ProductVersion;Status=[string]$signature.Status;Thumbprint=[string]$signature.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress`,
   ].join("; ");
   let metadata;
   try {
@@ -252,6 +260,10 @@ async function locateAndValidateGrok() {
     throw new Error("GrokRouter could not verify the installed Grok Bot Windows app.");
   }
   if (metadata.Status !== "Valid") throw new Error("The installed Grok Bot executable does not have a valid Windows signature. Nothing was changed.");
+  const thumbprint = String(metadata.Thumbprint || "").replaceAll(" ", "").toUpperCase();
+  if (!SUPPORTED_GROK_SIGNER_THUMBPRINTS.has(thumbprint)) {
+    throw new Error("This Grok Bot Windows signer is not on GrokRouter's reviewed certificate list. Windows installation is disabled; nothing was changed.");
+  }
   const version = String(metadata.Version || "").trim();
   if (version !== SUPPORTED_GROK_VERSION && version !== `${SUPPORTED_GROK_VERSION}.0`) {
     throw new Error(`Grok Bot ${version || "unknown"} is not supported. This beta is pinned to ${SUPPORTED_GROK_VERSION} and will not patch an unknown build.`);
@@ -276,19 +288,53 @@ function launchDetached(executable, args = []) {
   child.unref();
 }
 
+function chooseDiagnosticPort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", reject);
+    server.listen({ host: "127.0.0.1", port: 0, exclusive: true }, () => {
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      server.close((error) => error ? reject(error) : resolve(port));
+    });
+  });
+}
+
+async function diagnosticListenerPath() {
+  if (!diagnosticPort || !diagnosticExecutable) throw new Error("Grok Bot's installer-owned diagnostic endpoint is unavailable.");
+  const command = [
+    `$connection = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort ${diagnosticPort} -State Listen -ErrorAction Stop | Select-Object -First 1`,
+    `$process = Get-CimInstance Win32_Process -Filter \"ProcessId=$($connection.OwningProcess)\"`,
+    `[pscustomobject]@{Path=[string]$process.ExecutablePath;ProcessId=[int]$connection.OwningProcess} | ConvertTo-Json -Compress`,
+  ].join("; ");
+  const { stdout } = await execFileAsync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command], { windowsHide: true });
+  const metadata = JSON.parse(stdout.trim());
+  if (path.resolve(String(metadata.Path || "")).toLowerCase() !== path.resolve(diagnosticExecutable).toLowerCase()) {
+    throw new Error("The local diagnostic port is not owned by the verified Grok Bot executable. Nothing was changed.");
+  }
+}
+
 async function browserWebSocketURL() {
-  const value = await requestJSON(`http://127.0.0.1:${CDP_PORT}/json/version`);
+  await diagnosticListenerPath();
+  const value = await requestJSON(`http://127.0.0.1:${diagnosticPort}/json/version`);
   if (typeof value.webSocketDebuggerUrl !== "string") throw new Error("Grok Bot's diagnostic endpoint is unavailable.");
-  return value.webSocketDebuggerUrl;
+  const endpoint = new URL(value.webSocketDebuggerUrl);
+  if (endpoint.protocol !== "ws:"
+      || endpoint.hostname !== "127.0.0.1"
+      || Number(endpoint.port) !== diagnosticPort
+      || !endpoint.pathname.startsWith("/devtools/browser/")) {
+    throw new Error("Grok Bot returned an invalid diagnostic WebSocket endpoint. Nothing was changed.");
+  }
+  return endpoint.href;
 }
 
 async function relaunchWithDiagnostics(executable) {
   log(`Verified signed Grok Bot ${SUPPORTED_GROK_VERSION}. Restarting with a local diagnostic port…`);
   await stopGrok();
-  if (await browserWebSocketURL().then(() => true).catch(() => false)) {
-    throw new Error(`Local port ${CDP_PORT} is already in use. Close the application using it and retry.`);
-  }
-  launchDetached(executable, [`--remote-debugging-address=127.0.0.1`, `--remote-debugging-port=${CDP_PORT}`]);
+  diagnosticPort = await chooseDiagnosticPort();
+  diagnosticExecutable = executable;
+  launchDetached(executable, [`--remote-debugging-address=127.0.0.1`, `--remote-debugging-port=${diagnosticPort}`]);
   diagnosticsLaunched = true;
   for (let attempt = 0; attempt < 120; attempt += 1) {
     if (await browserWebSocketURL().then(() => true).catch(() => false)) return;
@@ -304,6 +350,8 @@ async function relaunchNormallyIfNeeded(executable) {
   await stopGrok();
   try { launchDetached(executable); } catch { log("Grok Bot did not reopen automatically. Open it normally from the Start menu."); }
   diagnosticsLaunched = false;
+  diagnosticPort = 0;
+  diagnosticExecutable = "";
 }
 
 async function targets(client) {
@@ -338,15 +386,18 @@ async function evaluate(client, sessionID, expression) {
   return response;
 }
 
-async function saveOpenRouterKey(key, client, pageSession) {
+async function saveProviderKey(key, secretName, providerLabel, client, pageSession) {
   if (!key) return;
-  log("Saving OPENROUTER_API_KEY through Grok Bot's protected Secrets store…");
+  if (!["OPENAI_API_KEY", "OPENROUTER_API_KEY"].includes(secretName)) {
+    throw new Error("Unsupported provider secret requested. Nothing was changed.");
+  }
+  log(`Saving ${secretName} through Grok Bot's protected Secrets store…`);
   const response = await evaluate(
     client,
     pageSession,
-    `window.desktop.secrets.upsert({OPENROUTER_API_KEY:${JSON.stringify(key)}}).then(()=>({saved:true}))`,
+    `window.desktop.secrets.upsert({${secretName}:${JSON.stringify(key)}}).then(()=>({saved:true}))`,
   );
-  if (response.result?.value?.saved !== true) throw new Error("Grok Bot did not confirm that its protected secret was saved.");
+  if (response.result?.value?.saved !== true) throw new Error(`Grok Bot did not confirm that the ${providerLabel} credential was saved.`);
 }
 
 async function tryOpenComputer(client, pageSession) {
@@ -643,15 +694,20 @@ async function updateNativeWorkflows(client, pageSession, operation = "sync") {
 
 function validatedInstallOptions(raw) {
   const providers = Array.isArray(raw.providers) ? [...new Set(raw.providers)] : [];
-  if (!providers.length || providers.some((item) => item !== "codex" && item !== "openrouter")) throw new Error("Choose Codex SDK, OpenRouter, or both.");
+  if (!providers.length || providers.some((item) => !["codex", "openai", "openrouter"].includes(item))) throw new Error("Choose Codex SDK, OpenAI, OpenRouter, or a combination.");
   if (!providers.includes(raw.defaultProvider)) throw new Error("The default provider must be enabled.");
   if (!CODEX_MODELS.has(raw.codexModel)) throw new Error("Choose a packaged Codex model.");
+  if (!OPENAI_MODELS.has(raw.openAIModel)) throw new Error("Choose a packaged OpenAI model.");
   if (!OPENROUTER_MODELS.has(raw.openRouterModel)) throw new Error("Choose a packaged OpenRouter model.");
+  const openAIKey = typeof raw.openAIKey === "string" ? raw.openAIKey.trim() : "";
+  if (openAIKey && (!openAIKey.startsWith("sk-") || openAIKey.startsWith("sk-or-v1-") || openAIKey.length < 20 || /\s/.test(openAIKey))) {
+    throw new Error("The OpenAI key does not have the expected shape.");
+  }
   const openRouterKey = typeof raw.openRouterKey === "string" ? raw.openRouterKey.trim() : "";
   if (openRouterKey && (!openRouterKey.startsWith("sk-or-v1-") || openRouterKey.length < 33 || /\s/.test(openRouterKey))) {
     throw new Error("The OpenRouter key does not have the expected shape.");
   }
-  return { defaultProvider: raw.defaultProvider, providers, codexModel: raw.codexModel, openRouterModel: raw.openRouterModel, openRouterKey };
+  return { defaultProvider: raw.defaultProvider, providers, codexModel: raw.codexModel, openAIModel: raw.openAIModel, openRouterModel: raw.openRouterModel, openAIKey, openRouterKey };
 }
 
 async function installRouter(executable, rawOptions) {
@@ -661,8 +717,12 @@ async function installRouter(executable, rawOptions) {
   const client = new CDPClient(await browserWebSocketURL());
   try {
     const pageSession = await mainPageSession(client);
+    if (options.providers.includes("openai")) {
+      if (options.openAIKey) await saveProviderKey(options.openAIKey, "OPENAI_API_KEY", "OpenAI", client, pageSession);
+      else log("No OpenAI key entered. Keeping any existing OPENAI_API_KEY in Grok Bot Secrets.");
+    }
     if (options.providers.includes("openrouter")) {
-      if (options.openRouterKey) await saveOpenRouterKey(options.openRouterKey, client, pageSession);
+      if (options.openRouterKey) await saveProviderKey(options.openRouterKey, "OPENROUTER_API_KEY", "OpenRouter", client, pageSession);
       else log("No OpenRouter key entered. Keeping any existing OPENROUTER_API_KEY in Grok Bot Secrets.");
     }
     log("Verifying that keyboard input is isolated to the Bot terminal…");
@@ -688,7 +748,7 @@ async function installRouter(executable, rawOptions) {
       "rm -rf /tmp/grokbot-router-installer/payload",
       "mkdir -p /tmp/grokbot-router-installer/payload",
       "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; echo GROKROUTER_${installAttempt}_INSTALL_FAILED_UNKNOWN_CODE_$code; fi`,
+      `if ROUTER_INSTALL_ATTEMPT=${installAttempt} bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider ${options.defaultProvider} --providers ${options.providers.join(",")} --codex-model ${options.codexModel} --openai-model ${options.openAIModel} --openrouter-model ${options.openRouterModel}; then clear; printf %s ${installPayload} | base64 -d; else code=$?; echo GROKROUTER_${installAttempt}_INSTALL_FAILED_UNKNOWN_CODE_$code; fi`,
     );
     log("Transferring a SHA-256-verified payload into the Bot computer…");
     const installVNC = await typeRemoteCommandsResilient(commands, client, pageSession);
@@ -699,6 +759,7 @@ async function installRouter(executable, rawOptions) {
     await updateNativeWorkflows(client, pageSession);
     await evaluate(client, pageSession, "window.desktop.forceGatewayReconnect().then(()=>true)").catch(() => {});
     if (options.defaultProvider === "openrouter") return "Installed with OpenRouter selected. Send /router doctor in Grok Bot.";
+    if (options.defaultProvider === "openai") return "Installed with OpenAI selected. Send /router doctor in Grok Bot.";
     if (options.providers.includes("codex")) return "Installed. Click Codex sign-in, then send /router doctor in Grok Bot.";
     return "Installed. Send /router doctor in Grok Bot to verify the selected model.";
   } finally {

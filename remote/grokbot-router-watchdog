@@ -103,9 +103,8 @@ while true; do
     pkill -f '/home/box/sand-host/host-main.cjs' >/dev/null 2>&1 || true
     sleep 15
   else
-    # Hosts that fail both the exact signed list and structural verification
-    # (marker-free, every anchor exactly once, read-only patch passes) remain
-    # untouched. Retry slowly in case Grok is still staging a stock host.
+    # Hosts absent from the exact signed hash-and-byte list remain untouched.
+    # Retry slowly in case Grok is still staging a known stock host.
     log_event "repair-refused-unknown-or-incomplete-host"
     sleep 60
   fi

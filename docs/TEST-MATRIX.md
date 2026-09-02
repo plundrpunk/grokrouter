@@ -1,9 +1,14 @@
 # Verification matrix
 
-Research/build lock: 2026-09-01. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.46.
+Research/build lock: 2026-09-02. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.47.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |
+| Direct OpenAI text and native function calls | Mock HTTP contract pins `https://api.openai.com/v1/chat/completions`, Bearer auth, model/reasoning fields, structured tools, and key redaction | Not run for beta.47 | Automated pass; live pending |
+| Official-provider endpoint and secret-path pinning | Runtime rejects custom OpenAI/OpenRouter endpoints and secret paths; synthetic reinstall discards hostile inherited config | Not run for beta.47 | Automated pass; live pending |
+| llama.cpp compatibility boundary | Mock contract accepts only unauthenticated loopback OpenAI-compatible endpoints and preserves function calls | Not run for beta.47 | Automated pass; live pending |
+| Exact-host-only mutation | Patch and full payload tests prove a structurally compatible unknown host is unchanged and receives no backup even when the legacy manifest flag is enabled | Not run for beta.47 | Automated pass; live pending |
+| Installer app/CDP identity | macOS typecheck/contracts verify bundle ID, Team ID, random port, exact PID ownership and WebSocket endpoint; Windows contracts verify random port and executable ownership | Not run for beta.47 | Automated pass; platform live pending |
 | Runtime parses real-shaped Grok messages | Node unit tests | Prototype conversation | Pass |
 | OpenRouter function calls retain tool names, IDs, and arguments | Mock HTTP contract test | Previous prototype | Pass; rerun on release adapter |
 | Image/tool-result conversion | Unit test with PNG tool output | Codex called outer `Screenshot` and identified the Terminal window | Pass |
