@@ -41,6 +41,7 @@ Beta.47 allowed a metered provider to be selected as the default without making 
 - Default limits: 80 transcript messages, 128 KiB request body, 2,048 output tokens, 5 requests per Bot/hour, 20 per Bot/day, 10 router-wide/hour, and 30 router-wide/day.
 - Atomic persistent quota reservation before every HTTP attempt, including retries.
 - `provider_request_start` audit receipts and normalized usage/request-size fields on successful turns.
+- Doctor labels stored credentials as shape-valid only and does not imply that a revoked key still has provider access.
 
 ## Provider support packet
 

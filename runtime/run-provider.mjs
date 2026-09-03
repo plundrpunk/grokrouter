@@ -2181,7 +2181,7 @@ async function doctorText(config, state) {
     const definition = providerDefinition(provider);
     try {
       await persistedProviderKey(provider, config);
-      checks.push(`${definition.label} credential: configured and valid shape`);
+      checks.push(`${definition.label} credential: configured; shape valid; provider access not tested`);
     } catch (error) {
       checks.push(String(error?.message || error).includes("present but")
         ? `${definition.label} credential: present but invalid shape`

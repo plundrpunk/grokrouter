@@ -254,7 +254,7 @@ for provider, label, name, pattern in (
             valid = False
     print(label)
     if valid:
-        print('  Credential: configured and valid shape')
+        print('  Credential: configured; shape valid; provider access not tested')
     elif value:
         print('  Credential: present but invalid shape')
         ok = False

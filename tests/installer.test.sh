@@ -142,6 +142,7 @@ fi
 grep -q 'private let repairButton' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'direct, metered API billing that is separate from ChatGPT/Codex subscriptions' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'Use metered API' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
+grep -q 'provider access not tested' "$PROJECT_ROOT/remote/grokbot-router"
 grep -q 'Bring your own model.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 ! grep -q 'Bring your own brain.' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
 grep -q 'labelWithString: "GROK BOT 0.30.0"' "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift"
