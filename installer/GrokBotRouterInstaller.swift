@@ -1,12 +1,13 @@
 import AppKit
 import CryptoKit
 import Foundation
+import Security
 import Vision
 
 private let supportedGrokVersion = "0.30.0"
 private let grokBundleIdentifier = "com.anysphere.sand"
+private let grokTeamIdentifier = "DCNK4UB866"
 private let grokAppPath = "/Applications/Grok Bot.app"
-private let cdpPort = 19222
 
 enum InstallerError: LocalizedError {
     case message(String)
@@ -173,10 +174,13 @@ final class InstallerCardView: NSView {
 final class RouterInstallerController: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private let codexCheckbox = NSButton(checkboxWithTitle: "Codex SDK", target: nil, action: nil)
+    private let openAICheckbox = NSButton(checkboxWithTitle: "OpenAI", target: nil, action: nil)
     private let openRouterCheckbox = NSButton(checkboxWithTitle: "OpenRouter", target: nil, action: nil)
     private let defaultProviderPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let codexModelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let openAIModelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let openRouterModelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let openAIKeyField = NSSecureTextField()
     private let openRouterKeyField = NSSecureTextField()
     private let installButton = NSButton(title: "Install Router", target: nil, action: nil)
     private let authButton = NSButton(title: "Start Codex Sign-in", target: nil, action: nil)
@@ -192,6 +196,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     private var recoveryRow: NSStackView!
     private var busy = false
     private var diagnosticsLaunchedByInstaller = false
+    private var diagnosticPort = 0
+    private var diagnosticGrokProcessID: pid_t?
     private var lastDiagnosticReport = ""
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -204,7 +210,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
 
     private func buildWindow() {
         window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 780, height: 838),
+            contentRect: NSRect(x: 0, y: 0, width: 780, height: 930),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -227,7 +233,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let title = NSTextField(labelWithString: "Bring your own model.")
         title.font = .systemFont(ofSize: 30, weight: .bold)
         title.textColor = .labelColor
-        let subtitle = NSTextField(wrappingLabelWithString: "Keep Grok Bot’s interface, computer, files and tools. Route each Bot through Codex or OpenRouter, then switch models from the normal chat composer.")
+        let subtitle = NSTextField(wrappingLabelWithString: "Keep Grok Bot’s interface, computer, files and tools. Route each Bot through Codex, OpenAI, or OpenRouter, then switch models from the normal chat composer.")
         subtitle.textColor = .secondaryLabelColor
         subtitle.font = .systemFont(ofSize: 14, weight: .regular)
         subtitle.maximumNumberOfLines = 3
@@ -241,14 +247,18 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         hero.spacing = 20
 
         codexCheckbox.state = .on
+        openAICheckbox.state = .on
         openRouterCheckbox.state = .on
         codexCheckbox.target = self
+        openAICheckbox.target = self
         openRouterCheckbox.target = self
         codexCheckbox.action = #selector(providerSelectionChanged)
+        openAICheckbox.action = #selector(providerSelectionChanged)
         openRouterCheckbox.action = #selector(providerSelectionChanged)
 
-        defaultProviderPopup.addItems(withTitles: ["Codex SDK", "OpenRouter"])
+        defaultProviderPopup.addItems(withTitles: ["Codex SDK", "OpenAI", "OpenRouter"])
         codexModelPopup.addItems(withTitles: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
+        openAIModelPopup.addItems(withTitles: ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"])
         openRouterModelPopup.addItems(withTitles: [
             "anthropic/claude-sonnet-4.6",
             "openai/gpt-5.6-sol",
@@ -257,24 +267,28 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "google/gemini-3.1-pro-preview",
             "google/gemini-3.1-flash-lite"
         ])
+        openAIKeyField.placeholderString = "OpenAI API key (stored only in Grok Bot Secrets)"
         openRouterKeyField.placeholderString = "OpenRouter API key (stored only in Grok Bot Secrets)"
 
         codexCheckbox.font = .systemFont(ofSize: 14, weight: .medium)
+        openAICheckbox.font = .systemFont(ofSize: 14, weight: .medium)
         openRouterCheckbox.font = .systemFont(ofSize: 14, weight: .medium)
-        let providerRow = NSStackView(views: [codexCheckbox, openRouterCheckbox])
+        let providerRow = NSStackView(views: [codexCheckbox, openAICheckbox, openRouterCheckbox])
         providerRow.orientation = .horizontal
         providerRow.spacing = 28
         let defaultRow = formRow("Default provider", defaultProviderPopup)
         let codexRow = formRow("Codex model", codexModelPopup)
+        let openAIRow = formRow("OpenAI model", openAIModelPopup)
+        let openAIKeyRow = formRow("OpenAI key", openAIKeyField)
         let openRouterRow = formRow("OpenRouter model", openRouterModelPopup)
-        let keyRow = formRow("OpenRouter key", openRouterKeyField)
+        let openRouterKeyRow = formRow("OpenRouter key", openRouterKeyField)
 
         let modelSectionHeader = sectionHeader(
             number: "01",
             title: "Choose the models",
             detail: "New Bots start on the default. Each Bot can switch later."
         )
-        let modelStack = NSStackView(views: [modelSectionHeader, providerRow, defaultRow, codexRow, openRouterRow, keyRow])
+        let modelStack = NSStackView(views: [modelSectionHeader, providerRow, defaultRow, codexRow, openAIRow, openAIKeyRow, openRouterRow, openRouterKeyRow])
         modelStack.orientation = .vertical
         modelStack.alignment = .leading
         modelStack.spacing = 12
@@ -446,18 +460,22 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
 
     @objc private func providerSelectionChanged() {
         let codex = codexCheckbox.state == .on
+        let openAI = openAICheckbox.state == .on
         let openRouter = openRouterCheckbox.state == .on
         let previousSelection = defaultProviderPopup.titleOfSelectedItem
         codexModelPopup.isEnabled = codex
+        openAIModelPopup.isEnabled = openAI
+        openAIKeyField.isEnabled = openAI
         openRouterModelPopup.isEnabled = openRouter
         openRouterKeyField.isEnabled = openRouter
         defaultProviderPopup.removeAllItems()
         if codex { defaultProviderPopup.addItem(withTitle: "Codex SDK") }
+        if openAI { defaultProviderPopup.addItem(withTitle: "OpenAI") }
         if openRouter { defaultProviderPopup.addItem(withTitle: "OpenRouter") }
         if let previousSelection, defaultProviderPopup.itemTitles.contains(previousSelection) {
             defaultProviderPopup.selectItem(withTitle: previousSelection)
         }
-        installButton.isEnabled = (codex || openRouter) && !busy
+        installButton.isEnabled = (codex || openAI || openRouter) && !busy
     }
 
     private func setBusy(_ value: Bool, status: String) {
@@ -466,6 +484,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         progress.isHidden = !value
         if value { progress.startAnimation(nil) } else { progress.stopAnimation(nil) }
         codexCheckbox.isEnabled = !value
+        openAICheckbox.isEnabled = !value
         openRouterCheckbox.isEnabled = !value
         installButton.isEnabled = !value
         installButton.alphaValue = value ? 0.55 : 1
@@ -534,7 +553,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 let upper = line.uppercased()
                 return !line.isEmpty && interestingWords.contains(where: upper.contains)
             }
-            .suffix(10)
+            .suffix(24)
             .map { String($0.prefix(240)) }
             .joined(separator: "\n")
         guard !selected.isEmpty else { return "No safe terminal excerpt was available." }
@@ -620,14 +639,28 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
 
     @objc private func startInstall() {
         let codex = codexCheckbox.state == .on
+        let openAI = openAICheckbox.state == .on
         let openRouter = openRouterCheckbox.state == .on
-        guard codex || openRouter else { return }
-        let defaultProvider = defaultProviderPopup.titleOfSelectedItem == "OpenRouter" ? "openrouter" : "codex"
-        let providers = [codex ? "codex" : nil, openRouter ? "openrouter" : nil].compactMap { $0 }.joined(separator: ",")
+        guard codex || openAI || openRouter else { return }
+        let defaultProvider = defaultProviderPopup.titleOfSelectedItem == "OpenRouter"
+            ? "openrouter"
+            : defaultProviderPopup.titleOfSelectedItem == "OpenAI" ? "openai" : "codex"
+        let providers = [codex ? "codex" : nil, openAI ? "openai" : nil, openRouter ? "openrouter" : nil].compactMap { $0 }.joined(separator: ",")
         let codexModel = codexModelPopup.titleOfSelectedItem ?? "gpt-5.6-sol"
+        let openAIModel = openAIModelPopup.titleOfSelectedItem ?? "gpt-5.6-sol"
         let openRouterModel = openRouterModelPopup.titleOfSelectedItem ?? "anthropic/claude-sonnet-4.6"
-        let key = openRouterKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        if openRouter && !key.isEmpty && !isValidOpenRouterKey(key) {
+        let openAIKey = openAIKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        let openRouterKey = openRouterKeyField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if openAI && !openAIKey.isEmpty && !isValidOpenAIKey(openAIKey) {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "That OpenAI key does not look valid"
+            alert.informativeText = "Paste the complete project key beginning with sk-. Nothing has been saved or installed."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+        if openRouter && !openRouterKey.isEmpty && !isValidOpenRouterKey(openRouterKey) {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "That OpenRouter key does not look valid"
@@ -636,14 +669,17 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             alert.runModal()
             return
         }
+        openAIKeyField.stringValue = ""
         openRouterKeyField.stringValue = ""
         runOperation("Step 1 of 6 · Checking Grok Bot…", retryableInstall: true) {
             try await self.install(
                 defaultProvider: defaultProvider,
                 providers: providers,
                 codexModel: codexModel,
+                openAIModel: openAIModel,
                 openRouterModel: openRouterModel,
-                openRouterKey: key
+                openAIKey: openAIKey,
+                openRouterKey: openRouterKey
             )
         }
     }
@@ -701,22 +737,65 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
     }
 
     private func validateGrokApp() throws {
+        let appURL = URL(fileURLWithPath: grokAppPath, isDirectory: true)
         let plistPath = "\(grokAppPath)/Contents/Info.plist"
         guard let info = NSDictionary(contentsOfFile: plistPath) as? [String: Any] else {
             throw InstallerError.message("Install the official Grok Bot app in /Applications first.")
+        }
+        guard info["CFBundleIdentifier"] as? String == grokBundleIdentifier else {
+            throw InstallerError.message("The app at /Applications/Grok Bot.app has the wrong bundle identity. Nothing was changed.")
         }
         let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
         guard version == supportedGrokVersion else {
             throw InstallerError.message("Grok Bot \(version) is not supported. This beta is pinned to \(supportedGrokVersion) and will not patch an unknown build.")
         }
+        var staticCode: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(appURL as CFURL, [], &staticCode) == errSecSuccess,
+              let staticCode else {
+            throw InstallerError.message("GrokRouter could not inspect Grok Bot's code signature. Nothing was changed.")
+        }
+        let requirementText = "anchor apple generic and identifier \"\(grokBundleIdentifier)\" and certificate leaf[subject.OU] = \"\(grokTeamIdentifier)\""
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(requirementText as CFString, [], &requirement) == errSecSuccess,
+              let requirement,
+              SecStaticCodeCheckValidity(staticCode, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess else {
+            throw InstallerError.message("Grok Bot is not signed by the expected publisher. Nothing was changed.")
+        }
+    }
+
+    private func listenerProcessIDs(port: Int) throws -> Set<pid_t> {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/sbin/lsof") else {
+            throw InstallerError.message("GrokRouter cannot verify ownership of the local diagnostic port. Nothing was changed.")
+        }
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        process.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return Set(text.split(whereSeparator: { $0.isWhitespace }).compactMap { pid_t($0) })
+    }
+
+    private func chooseDiagnosticPort() throws -> Int {
+        for _ in 0..<32 {
+            let candidate = Int.random(in: 49_152...65_535)
+            if try listenerProcessIDs(port: candidate).isEmpty { return candidate }
+        }
+        throw InstallerError.message("GrokRouter could not reserve a private local diagnostic port. Nothing was changed.")
     }
 
     private func relaunchGrokWithDiagnostics() async throws {
         appendLog("Verified Grok Bot \(supportedGrokVersion). Restarting with a local diagnostic port…")
         await stopRunningGrok()
+        diagnosticPort = try chooseDiagnosticPort()
+        diagnosticGrokProcessID = nil
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-na", grokAppPath, "--args", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=\(cdpPort)"]
+        process.arguments = ["-na", grokAppPath, "--args", "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=\(diagnosticPort)"]
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
@@ -724,7 +803,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         }
         diagnosticsLaunchedByInstaller = true
         for _ in 0..<120 {
-            if (try? await browserWebSocketURL()) != nil { return }
+            if diagnosticGrokProcessID == nil {
+                diagnosticGrokProcessID = NSWorkspace.shared.runningApplications
+                    .first(where: { $0.bundleIdentifier == grokBundleIdentifier })?
+                    .processIdentifier
+            }
+            if diagnosticGrokProcessID != nil, (try? await browserWebSocketURL()) != nil { return }
             try await Task.sleep(nanoseconds: 250_000_000)
         }
         throw InstallerError.message("Grok Bot's local diagnostic connection did not become ready.")
@@ -764,15 +848,28 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             appendLog("Grok Bot did not reopen automatically. Open it normally from Applications.")
         }
         diagnosticsLaunchedByInstaller = false
+        diagnosticGrokProcessID = nil
+        diagnosticPort = 0
     }
 
     private func browserWebSocketURL() async throws -> URL {
-        let url = URL(string: "http://127.0.0.1:\(cdpPort)/json/version")!
+        guard diagnosticPort > 0, let expectedPID = diagnosticGrokProcessID else {
+            throw InstallerError.message("Grok Bot's installer-owned diagnostic endpoint is unavailable.")
+        }
+        let owners = try listenerProcessIDs(port: diagnosticPort)
+        guard owners == [expectedPID] else {
+            throw InstallerError.message("The local diagnostic port is not owned exclusively by the verified Grok Bot process. Nothing was changed.")
+        }
+        let url = URL(string: "http://127.0.0.1:\(diagnosticPort)/json/version")!
         let (data, response) = try await URLSession.shared.data(from: url)
         guard (response as? HTTPURLResponse)?.statusCode == 200,
               let value = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let string = value["webSocketDebuggerUrl"] as? String,
-              let result = URL(string: string) else {
+              let result = URL(string: string),
+              result.scheme == "ws",
+              result.host == "127.0.0.1",
+              result.port == diagnosticPort,
+              result.path.hasPrefix("/devtools/browser/") else {
             throw InstallerError.message("Grok Bot's diagnostic endpoint is unavailable.")
         }
         return result
@@ -816,6 +913,15 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         value.hasPrefix("sk-or-v1-") && value.count >= 33 && !value.contains(where: { $0.isWhitespace })
     }
 
+    private func isValidOpenAIKey(_ value: String) -> Bool {
+        value.hasPrefix("sk-")
+            && !value.hasPrefix("sk-or-v1-")
+            && value.count >= 23
+            && !value.contains(where: { $0.isWhitespace })
+            && !value.lowercased().contains("paste-key")
+            && !value.lowercased().contains("your-api-key")
+    }
+
     private func evaluate(_ client: CDPClient, sessionID: String, expression: String) async throws -> [String: Any] {
         let response = try await client.call("Runtime.evaluate", params: [
             "expression": expression,
@@ -835,15 +941,29 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         return response
     }
 
-    private func saveOpenRouterKey(_ key: String, client: CDPClient, pageSession: String) async throws {
+    private func saveProviderKey(
+        _ key: String,
+        secretName: String,
+        providerLabel: String,
+        client: CDPClient,
+        pageSession: String
+    ) async throws {
         guard !key.isEmpty else { return }
-        appendLog("Saving OPENROUTER_API_KEY through Grok Bot's protected Secrets store…")
+        guard ["OPENAI_API_KEY", "OPENROUTER_API_KEY"].contains(secretName) else {
+            throw InstallerError.message("Unsupported provider secret requested. Nothing was changed.")
+        }
+        appendLog("Saving \(secretName) through Grok Bot's protected Secrets store…")
         let literal = try jsonLiteral(key)
-        _ = try await evaluate(
+        let response = try await evaluate(
             client,
             sessionID: pageSession,
-            expression: "window.desktop.secrets.upsert({OPENROUTER_API_KEY:\(literal)}).then(()=>({saved:true}))"
+            expression: "window.desktop.secrets.upsert({\(secretName):\(literal)}).then(()=>({saved:true}))"
         )
+        guard let remoteObject = response["result"] as? [String: Any],
+              let value = remoteObject["value"] as? [String: Any],
+              value["saved"] as? Bool == true else {
+            throw InstallerError.message("Grok Bot did not confirm that the \(providerLabel) credential was saved.")
+        }
     }
 
     private func tryOpenComputer(_ client: CDPClient, pageSession: String) async throws {
@@ -1224,8 +1344,16 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
                 // word FAILED has been read as FATLED from real Bot terminals.
                 if normalized.contains("\(attemptPrefix)INSTALLFA") {
                     var phase = installPhaseDetails().reversed().first {
-                        normalized.contains("\(attemptPrefix)INSTALLFAILED\($0.marker)")
-                            || normalized.contains("INSTALLFAILED\($0.marker)")
+                        normalized.contains("\(attemptPrefix)INSTALLFA\($0.marker)")
+                            || normalized.contains("INSTALLFA\($0.marker)")
+                    }
+                    // Some OCR frames split or distort the failure word while
+                    // preserving the phase name. Prefer the latest visible
+                    // phase over an older observed phase in that case.
+                    if phase == nil {
+                        phase = installPhaseDetails().reversed().first {
+                            normalized.contains($0.marker)
+                        }
                     }
                     if phase == nil && observedPhase >= 0 {
                         phase = installPhaseDetails()[observedPhase]
@@ -1357,7 +1485,9 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         defaultProvider: String,
         providers: String,
         codexModel: String,
+        openAIModel: String,
         openRouterModel: String,
+        openAIKey: String,
         openRouterKey: String
     ) async throws -> String {
         try validateGrokApp()
@@ -1365,11 +1495,18 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         try await relaunchGrokWithDiagnostics()
         let client = CDPClient(url: try await browserWebSocketURL())
         let pageSession = try await mainPageSession(client)
-        if providers.contains("openrouter") {
+        if providers.split(separator: ",").contains("openai") {
+            if openAIKey.isEmpty {
+                appendLog("No OpenAI key entered. Keeping any existing OPENAI_API_KEY in Grok Bot Secrets.")
+            } else {
+                try await saveProviderKey(openAIKey, secretName: "OPENAI_API_KEY", providerLabel: "OpenAI", client: client, pageSession: pageSession)
+            }
+        }
+        if providers.split(separator: ",").contains("openrouter") {
             if openRouterKey.isEmpty {
                 appendLog("No OpenRouter key entered. Keeping any existing OPENROUTER_API_KEY in Grok Bot Secrets.")
             } else {
-                try await saveOpenRouterKey(openRouterKey, client: client, pageSession: pageSession)
+                try await saveProviderKey(openRouterKey, secretName: "OPENROUTER_API_KEY", providerLabel: "OpenRouter", client: client, pageSession: pageSession)
             }
         }
         appendLog("Verifying that keyboard input is isolated to the Bot terminal…")
@@ -1396,6 +1533,12 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         let digest = SHA256.hash(data: archive).map { String(format: "%02x", $0) }.joined()
         let installAttempt = Self.makeInstallAttemptID()
         let installPayload = Data("\nGROKBOT_ROUTER_INSTALL_OK\n\nGROKBOT_ROUTER_INSTALL_OK\n".utf8).base64EncodedString()
+        // Keep the current attempt's failure sentinel out of the visible shell
+        // command. OCR watches the terminal while this command is running; a
+        // literal sentinel in the command text looks identical to real output.
+        let failurePrefixPayload = Data(
+            "GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_".utf8
+        ).base64EncodedString()
         // Short, quote-free commands always return to a usable shell prompt if
         // the VNC target changes mid-transfer. A retry starts from an empty file.
         var encodedChunks: [String] = []
@@ -1418,7 +1561,7 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "rm -rf /tmp/grokbot-router-installer/payload",
             "mkdir -p /tmp/grokbot-router-installer/payload",
             "tar -xzf /tmp/grokbot-router-installer/payload.tgz -C /tmp/grokbot-router-installer/payload --strip-components=1",
-            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; echo GROKROUTER_\(installAttempt)_INSTALL_FAILED_UNKNOWN_CODE_$code; fi"
+            "if ROUTER_INSTALL_ATTEMPT=\(installAttempt) bash /tmp/grokbot-router-installer/payload/remote/install.sh --provider \(defaultProvider) --providers \(providers) --codex-model \(codexModel) --openai-model \(openAIModel) --openrouter-model \(openRouterModel); then clear; printf %s \(installPayload) | base64 -d; else code=$?; printf %s \(failurePrefixPayload) | base64 -d; printf '%s\\n' \"$code\"; fi"
         ])
         appendLog("Transferring a SHA-256-verified payload into the Bot computer…")
         let installVNC = try await typeRemoteCommandsResilient(commands, client: client, pageSession: pageSession)
@@ -1439,6 +1582,9 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
         _ = try? await evaluate(workflowClient, sessionID: workflowPageSession, expression: "window.desktop.forceGatewayReconnect().then(()=>true)")
         if defaultProvider == "openrouter" {
             return "Installed with OpenRouter selected. Send /router doctor in Grok Bot."
+        }
+        if defaultProvider == "openai" {
+            return "Installed with OpenAI selected. Send /router doctor in Grok Bot."
         }
         if providers.contains("codex") {
             return "Installed. Click Start Codex Sign-in, then send /router doctor in Grok Bot."

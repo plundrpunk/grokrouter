@@ -12,8 +12,8 @@ YouTube-ready files:
 ## Read the diagram in 45 seconds
 
 1. **You type in Grok Bot.** The app, Bot, conversation history, files and computer stay where they already are.
-2. **The router checks that Bot's saved choice.** One Bot can use Claude through OpenRouter, another can use a Codex model, and changing one does not change the others.
-3. **The chosen AI handles the turn.** The router sends the cleaned conversation and the tools Grok made available for that turn to Codex SDK or OpenRouter.
+2. **The router checks that Bot's saved choice.** One Bot can use Claude through OpenRouter, another can use OpenAI directly or a Codex model, and changing one does not change the others.
+3. **The chosen AI handles the turn.** The router sends the cleaned conversation and the tools Grok made available for that turn to the explicitly configured provider.
 4. **The answer returns to the same chat.** You do not move to another app or learn another interface.
 5. **If an action is needed, Grok still does it.** The selected AI can request a computer, file, browser or orchestration tool only when Grok supplied that tool for the turn. Grok's permission layer still applies. The result goes back to the same selected AI, which finishes the answer.
 6. **Recovery is built in.** Installation verifies that the Grok host is genuinely stock, saves the untouched original, and can restore the stock inference path later.
@@ -26,11 +26,11 @@ The native macOS installer—and the source-preview Windows shell built around t
 2. It restarts Grok Bot with a temporary diagnostic connection bound only to `127.0.0.1` on the local computer.
 3. It opens an existing Bot computer and verifies that its Terminal is really focused before typing anything.
 4. It transfers a small compressed payload through Grok's own remote-computer connection. The payload is checked with SHA-256 before extraction.
-5. Inside the Bot computer, it installs pinned runtime dependencies and verifies the stock host. A host is accepted from the exact signed hash-and-byte-count list, or by structural verification: no router marker, every source anchor exactly once, a read-only patch that passes `node --check`, and a plausible file size. Grok rotates 0.30.0 host builds often, so the structural path is what most installs use. The untouched host is saved under persistent `sand-data` storage before it is patched.
+5. Inside the Bot computer, it installs pinned runtime dependencies and verifies the stock host. A host is accepted only when its complete SHA-256 and byte count match the bundled manifest or signed compatibility registry. Structural checks are diagnostics, never write authority. The untouched exact-known host is saved under persistent `sand-data` storage before it is patched.
 6. It injects one narrow executor into the known host. The larger provider logic remains in a separate runtime that can be replaced or removed independently.
 7. It restarts the Grok host, verifies a real success marker, closes the diagnostic connection and reopens Grok Bot normally.
 
-If the app version, source anchors, payload checksum, registry signature, Terminal focus or generated code does not match expectations, installation stops rather than guessing. A rejected host produces a safe fingerprint, the read-only syntax result, the trust tier, and the reason; Grok host source is never uploaded. The Bot terminal is read back through screenshot OCR, so installer attempt IDs use only characters OCR does not confuse, and the completion timeout restarts whenever a new phase is observed.
+If the app identity/signature, version, exact host fingerprint, source anchors, payload checksum, registry signature, Terminal focus or generated code does not match expectations, installation stops rather than guessing. The random loopback diagnostic port must also be owned by the verified Grok Bot process. A rejected host produces a safe fingerprint, the read-only syntax result, the trust tier, and the reason; Grok host source is never uploaded.
 
 ## What happens when you send a message
 
@@ -39,7 +39,7 @@ If the app version, source anchors, payload checksum, registry signature, Termin
 1. Grok creates the same conversation session it normally would.
 2. The injected executor starts the isolated router runtime and supplies the transcript, stable Bot identifiers and any tools Grok offered for that turn.
 3. The runtime loads this Bot's provider and model from its own state file.
-4. Codex SDK resumes that Bot's Codex thread, or OpenRouter receives an OpenAI-compatible request for the selected model.
+4. Codex SDK resumes that Bot's Codex thread, or the selected OpenAI-compatible adapter sends a Chat Completions request to its validated endpoint.
 5. The provider returns text.
 6. The runtime hands that text to Grok's normal delivery mechanism, so it appears once in the original conversation.
 
@@ -52,7 +52,7 @@ Commands such as `/models`, `/provider`, `/doctor`, and `/router doctor` are han
 ### A tool turn
 
 1. Grok may include tool definitions with the turn.
-2. The router translates those exact schemas into the format expected by Codex SDK or OpenRouter.
+2. The router translates those exact schemas into the format expected by Codex SDK or the selected OpenAI-compatible provider.
 3. The selected AI may return a structured request for one of those tools.
 4. Grok performs the action and applies its normal permission behavior.
 5. The matching result returns to the same provider thread.
@@ -80,7 +80,7 @@ This is why the acceptance test always creates two new Bots: the first is switch
 
 ## Credentials and data boundaries
 
-- The OpenRouter key is saved through Grok Bot's protected Secrets store and loaded only when a request is made.
+- OpenAI and OpenRouter keys are saved through Grok Bot's protected Secrets store and loaded only when a request is made.
 - Provider credentials are not written to this repository, per-Bot state files or audit logs.
 - The chosen provider necessarily receives the conversation content and media needed to answer that routed turn.
 - Grok remains the executor for outer computer, file, browser and orchestration tools. A provider receives their results only when that tool path actually runs.
@@ -94,7 +94,7 @@ Read [SECURITY.md](../SECURITY.md) for the security boundary and [ARCHITECTURE.m
 - **Restore Stock Grok Bot** copies the SHA-256-verified persistent backup over the routed host, disables routing and restarts the host after the installer sees the restore marker.
 - `grokbot-router disable` leaves the adapter installed but sends new sessions down the stock path.
 - `grokbot-router enable` turns routing back on.
-- A future Grok Bot version is unsupported until its exact host is inspected, its hash and anchors are added, and the complete automated plus fresh-Bot live gate passes.
+- A future Grok Bot version or host variant is unsupported until its exact host is inspected, its hash and byte count are signed, and the complete automated plus fresh-Bot live gate passes.
 
 The exact beta.38 artifact completed install, verified restore, reinstall and a post-cycle fresh-Bot proof. See [TEST-MATRIX.md](TEST-MATRIX.md) for the evidence rather than relying on the diagram as a test claim.
 

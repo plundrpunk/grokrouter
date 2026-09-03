@@ -20,9 +20,6 @@ PATCH_ARGS=(
   --backup "${ROUTER_PATCH_BACKUP:-/home/box/sand-data/grokbot-router-backup/host-main.cjs.stock}"
   --manifest "${ROUTER_PATCH_MANIFEST:-$INSTALL_ROOT/patch/manifests/0.30.0.json}"
 )
-if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
-  PATCH_ARGS+=(--allow-unknown-host)
-fi
 set_registry_args() {
   ACTIVE_REGISTRY=""
   if [[ -x "$HOST_REGISTRY_TOOL" ]] && registry_path="$("$HOST_REGISTRY_TOOL" verify 2>/dev/null)"; then
@@ -68,9 +65,11 @@ usage() {
     "  doctor                         Verify runtime, host patch, and credentials" \
     "  repair                         Reapply the exact-gated host patch" \
     "  auth codex                     Start Codex device sign-in" \
-    "  provider codex|openrouter      Change the default for new Bot threads" \
+    "  provider PROVIDER              Change the default for new Bot threads" \
     "  model codex MODEL              Change the default Codex model" \
+    "  model openai MODEL             Change the default OpenAI model" \
     "  model openrouter vendor/model  Change the default OpenRouter model" \
+    "  model llamacpp MODEL           Change the local llama.cpp model" \
     "  enable | disable               Enable or bypass the router" \
     "  restart                        Restart Grok Bot's host process" \
     "  uninstall                      Restore the verified stock host" \
@@ -186,7 +185,10 @@ print(f"Automatic repair: {config.get('autoRepair') is True}")
 print(f"Default provider: {config.get('provider', 'codex')}")
 print(f"Providers: {', '.join(config.get('providers', []))}")
 print(f"Codex model: {config.get('codexModel', 'not configured')}")
+print(f"OpenAI model: {config.get('openAIModel', 'not configured')}")
 print(f"OpenRouter model: {config.get('openRouterModel', 'not configured')}")
+print(f"llama.cpp model: {config.get('llamaCppModel', 'not configured')}")
+print(f"llama.cpp endpoint: {config.get('llamaCppBaseUrl', 'not configured')}")
 PY
     ;;
   doctor)
@@ -204,31 +206,70 @@ PY
       fi
     fi
     printf '%s\n' "$doctor_output"
-    printf 'Codex\n'
-    if [[ -x "$CODEX_CLI" ]]; then
-      "$CODEX_CLI" login status 2>&1 | sed -E 's/([A-Za-z0-9._%+-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[account]/g' || true
-    else
-      printf '  CLI missing\n'
+    if python3 -c 'import json,sys; raise SystemExit(0 if "codex" in json.load(open(sys.argv[1])).get("providers", []) else 1)' "$CONFIG_PATH"; then
+      printf 'Codex\n'
+      if [[ -x "$CODEX_CLI" ]]; then
+        "$CODEX_CLI" login status 2>&1 | sed -E 's/([A-Za-z0-9._%+-]+)@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/[account]/g' || true
+      else
+        printf '  CLI missing\n'
+        doctor_ok=0
+      fi
     fi
-    printf 'OpenRouter\n'
-    python3 - <<'PY'
+    if ! python3 - "$CONFIG_PATH" <<'PY'
 import json
+import re
+import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
+config = json.load(open(sys.argv[1]))
+providers = config.get('providers', [])
+allowed = {'codex', 'openai', 'openrouter', 'llamacpp'}
+ok = isinstance(providers, list) and bool(providers) and all(provider in allowed for provider in providers)
 path = Path('/home/box/sand-data/box-secrets.json')
 try:
     data = json.loads(path.read_text())
-    value = data.get('secrets', {}).get('OPENROUTER_API_KEY', '').strip()
 except Exception:
-    value = ''
-valid = value.startswith('sk-or-v1-') and len(value) >= 33 and not any(ch.isspace() for ch in value)
-if valid:
-    print("  Credential: configured and valid shape")
-elif value:
-    print("  Credential: present but invalid shape")
-else:
-    print("  Credential: not configured")
+    data = {}
+secrets = data.get('secrets', {}) if isinstance(data, dict) else {}
+for provider, label, name, pattern in (
+    ('openai', 'OpenAI', 'OPENAI_API_KEY', r'sk-[A-Za-z0-9_-]{20,}'),
+    ('openrouter', 'OpenRouter', 'OPENROUTER_API_KEY', r'sk-or-v1-[A-Za-z0-9_-]{24,}'),
+):
+    if provider not in providers:
+        continue
+    value = secrets.get(name, '')
+    value = value.strip() if isinstance(value, str) else ''
+    valid = re.fullmatch(pattern, value) is not None
+    if provider == 'openai':
+        valid = valid and not value.startswith('sk-or-v1-')
+        if re.search(r'(paste|replace|example|your)[_-]?(api[_-]?)?key', value, re.I):
+            valid = False
+    print(label)
+    if valid:
+        print('  Credential: configured and valid shape')
+    elif value:
+        print('  Credential: present but invalid shape')
+        ok = False
+    else:
+        print('  Credential: not configured')
+        ok = False
+if 'llamacpp' in providers:
+    value = config.get('llamaCppBaseUrl', '')
+    try:
+        parsed = urlparse(value)
+        valid = parsed.scheme in {'http', 'https'} and parsed.hostname in {'127.0.0.1', '::1'} and not parsed.username and not parsed.password
+    except Exception:
+        valid = False
+    print('llama.cpp')
+    print(f"  Endpoint: {value if valid else 'invalid or non-loopback'}")
+    if not valid:
+        ok = False
+raise SystemExit(0 if ok else 1)
 PY
+    then
+      doctor_ok=0
+    fi
     printf 'Native commands\n'
     printf '  Registration is managed per Bot by the GrokRouter desktop installer.\n'
     printf '  Run Repair in GrokRouter to sync Bots or channels created after installation.\n'
@@ -252,8 +293,12 @@ PY
   provider)
     require_config
     provider="${2:-}"
-    if [[ "$provider" != "codex" && "$provider" != "openrouter" ]]; then
-      printf 'ERROR: provider must be codex or openrouter\n' >&2
+    if [[ "$provider" != "codex" && "$provider" != "openai" && "$provider" != "openrouter" && "$provider" != "llamacpp" ]]; then
+      printf 'ERROR: provider must be codex, openai, openrouter, or llamacpp\n' >&2
+      exit 2
+    fi
+    if ! python3 -c 'import json,sys; raise SystemExit(0 if sys.argv[2] in json.load(open(sys.argv[1])).get("providers", []) else 1)' "$CONFIG_PATH" "$provider"; then
+      printf 'ERROR: provider %s is not enabled in this installation\n' "$provider" >&2
       exit 2
     fi
     update_config provider "$provider"
@@ -270,14 +315,18 @@ PY
     fi
     if [[ "$provider" == "codex" ]]; then
       update_config codexModel "$model"
+    elif [[ "$provider" == "openai" ]]; then
+      update_config openAIModel "$model"
     elif [[ "$provider" == "openrouter" ]]; then
       if [[ ! "$model" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+$ ]]; then
         printf 'ERROR: OpenRouter models use vendor/model format\n' >&2
         exit 2
       fi
       update_config openRouterModel "$model"
+    elif [[ "$provider" == "llamacpp" ]]; then
+      update_config llamaCppModel "$model"
     else
-      printf 'ERROR: provider must be codex or openrouter\n' >&2
+      printf 'ERROR: provider must be codex, openai, openrouter, or llamacpp\n' >&2
       exit 2
     fi
     printf '%s default model updated to %s\n' "$provider" "$model"

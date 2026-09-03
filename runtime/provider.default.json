@@ -4,18 +4,29 @@
   "provider": "codex",
   "providers": [
     "codex",
+    "openai",
     "openrouter"
   ],
   "codexModel": "gpt-5.6-sol",
   "codexReasoning": "medium",
+  "openAIModel": "gpt-5.6-sol",
+  "openAIReasoning": "medium",
   "openRouterModel": "anthropic/claude-sonnet-4.6",
   "openRouterReasoning": "medium",
+  "llamaCppModel": "local",
+  "llamaCppReasoning": "medium",
+  "llamaCppBaseUrl": "http://127.0.0.1:8080/v1",
   "workingDirectory": "/workspace",
   "sandboxMode": "workspace-write",
   "networkAccessEnabled": true,
   "webSearchMode": "live",
   "approvalPolicy": "never",
   "codexModels": [
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
+    "gpt-5.6-luna"
+  ],
+  "openAIModels": [
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.6-luna"
@@ -28,10 +39,12 @@
     "google/gemini-3.1-pro-preview",
     "google/gemini-3.1-flash-lite"
   ],
+  "llamaCppModels": [
+    "local"
+  ],
   "timeoutMs": 900000,
   "runnerPath": "/home/box/sand-data/grokbot-router/run-provider.mjs",
   "nodePath": "/usr/bin/node",
   "statePath": "/home/box/sand-data/grokbot-router/conversation-states.json",
-  "auditPath": "/home/box/sand-data/grokbot-router/audit.jsonl",
-  "openRouterBaseUrl": "https://openrouter.ai/api/v1"
+  "auditPath": "/home/box/sand-data/grokbot-router/audit.jsonl"
 }

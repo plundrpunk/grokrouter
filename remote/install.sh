@@ -1,18 +1,24 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ROUTER_VERSION="0.1.0-beta.46"
+ROUTER_VERSION="0.1.0-beta.47"
 PAYLOAD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALL_ROOT="/home/box/sand-data/grokbot-router"
 INSTALL_PARENT="/home/box/sand-data"
 DEFAULT_PROVIDER="codex"
 CODEX_MODEL="gpt-5.6-sol"
+OPENAI_MODEL="gpt-5.6-sol"
 OPENROUTER_MODEL="anthropic/claude-sonnet-4.6"
-ENABLED_PROVIDERS="codex,openrouter"
+LLAMACPP_MODEL="local"
+LLAMACPP_BASE_URL="http://127.0.0.1:8080/v1"
+ENABLED_PROVIDERS="codex,openai,openrouter"
 PROVIDER_EXPLICIT=0
 PROVIDERS_EXPLICIT=0
 CODEX_MODEL_EXPLICIT=0
+OPENAI_MODEL_EXPLICIT=0
 OPENROUTER_MODEL_EXPLICIT=0
+LLAMACPP_MODEL_EXPLICIT=0
+LLAMACPP_BASE_URL_EXPLICIT=0
 START_WATCHDOG=1
 GROK_SKILLS_ROOT="${ROUTER_GROK_SKILLS_ROOT:-/home/box/.grok/skills}"
 INSTALL_ATTEMPT="${ROUTER_INSTALL_ATTEMPT:-LOCAL}"
@@ -50,10 +56,13 @@ usage() {
     "GrokRouter installer ${ROUTER_VERSION}" \
     "" \
     "Usage: install.sh [options]" \
-    "  --provider codex|openrouter" \
-    "  --providers codex|openrouter|codex,openrouter" \
+    "  --provider codex|openai|openrouter|llamacpp" \
+    "  --providers comma-separated provider IDs" \
     "  --codex-model MODEL" \
+    "  --openai-model MODEL" \
     "  --openrouter-model vendor/model" \
+    "  --llamacpp-model MODEL" \
+    "  --llamacpp-base-url LOOPBACK_URL" \
     "  --install-root PATH          Development/testing only" \
     "  --no-restart                 Do not restart the Grok host"
 }
@@ -76,9 +85,24 @@ while [[ $# -gt 0 ]]; do
       CODEX_MODEL_EXPLICIT=1
       shift 2
       ;;
+    --openai-model)
+      OPENAI_MODEL="${2:?missing OpenAI model}"
+      OPENAI_MODEL_EXPLICIT=1
+      shift 2
+      ;;
     --openrouter-model)
       OPENROUTER_MODEL="${2:?missing OpenRouter model}"
       OPENROUTER_MODEL_EXPLICIT=1
+      shift 2
+      ;;
+    --llamacpp-model)
+      LLAMACPP_MODEL="${2:?missing llama.cpp model}"
+      LLAMACPP_MODEL_EXPLICIT=1
+      shift 2
+      ;;
+    --llamacpp-base-url)
+      LLAMACPP_BASE_URL="${2:?missing llama.cpp base URL}"
+      LLAMACPP_BASE_URL_EXPLICIT=1
       shift 2
       ;;
     --install-root)
@@ -102,14 +126,23 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$DEFAULT_PROVIDER" != "codex" && "$DEFAULT_PROVIDER" != "openrouter" ]]; then
-  fail_install "INVALID_PROVIDER" "--provider must be codex or openrouter"
+if [[ "$DEFAULT_PROVIDER" != "codex" && "$DEFAULT_PROVIDER" != "openai" && "$DEFAULT_PROVIDER" != "openrouter" && "$DEFAULT_PROVIDER" != "llamacpp" ]]; then
+  fail_install "INVALID_PROVIDER" "--provider must be codex, openai, openrouter, or llamacpp"
 fi
 if [[ ! "$OPENROUTER_MODEL" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._:+-]+$ ]]; then
   fail_install "INVALID_OPENROUTER_MODEL" "--openrouter-model must use vendor/model format"
 fi
-if [[ "$ENABLED_PROVIDERS" != "codex" && "$ENABLED_PROVIDERS" != "openrouter" && "$ENABLED_PROVIDERS" != "codex,openrouter" && "$ENABLED_PROVIDERS" != "openrouter,codex" ]]; then
-  fail_install "INVALID_PROVIDERS" "--providers must be codex, openrouter, or codex,openrouter"
+if [[ ! "$ENABLED_PROVIDERS" =~ ^(codex|openai|openrouter|llamacpp)(,(codex|openai|openrouter|llamacpp))*$ ]]; then
+  fail_install "INVALID_PROVIDERS" "--providers must be a comma-separated list of supported provider IDs"
+fi
+IFS=',' read -r -a provider_items <<< "$ENABLED_PROVIDERS"
+for provider_item in "${provider_items[@]}"; do
+  if [[ "$provider_item" != "codex" && "$provider_item" != "openai" && "$provider_item" != "openrouter" && "$provider_item" != "llamacpp" ]]; then
+    fail_install "INVALID_PROVIDERS" "--providers contains unsupported provider $provider_item"
+  fi
+done
+if [[ ",$ENABLED_PROVIDERS," != *",$DEFAULT_PROVIDER,"* ]]; then
+  fail_install "INVALID_PROVIDERS" "the default provider must be enabled"
 fi
 
 emit_phase "PREFLIGHT"
@@ -198,46 +231,76 @@ ROUTER_PROVIDERS="$ENABLED_PROVIDERS" \
 ROUTER_PROVIDERS_EXPLICIT="$PROVIDERS_EXPLICIT" \
 ROUTER_CODEX_MODEL="$CODEX_MODEL" \
 ROUTER_CODEX_MODEL_EXPLICIT="$CODEX_MODEL_EXPLICIT" \
+ROUTER_OPENAI_MODEL="$OPENAI_MODEL" \
+ROUTER_OPENAI_MODEL_EXPLICIT="$OPENAI_MODEL_EXPLICIT" \
 ROUTER_OPENROUTER_MODEL="$OPENROUTER_MODEL" \
 ROUTER_OPENROUTER_MODEL_EXPLICIT="$OPENROUTER_MODEL_EXPLICIT" \
+ROUTER_LLAMACPP_MODEL="$LLAMACPP_MODEL" \
+ROUTER_LLAMACPP_MODEL_EXPLICIT="$LLAMACPP_MODEL_EXPLICIT" \
+ROUTER_LLAMACPP_BASE_URL="$LLAMACPP_BASE_URL" \
+ROUTER_LLAMACPP_BASE_URL_EXPLICIT="$LLAMACPP_BASE_URL_EXPLICIT" \
 python3 - <<'PY'
 import json
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 path = Path(os.environ["ROUTER_CONFIG_PATH"])
 defaults_path = Path(os.environ["ROUTER_DEFAULT_CONFIG_PATH"])
 try:
-    config = json.loads(path.read_text())
+    previous = json.loads(path.read_text())
 except Exception:
-    config = {}
+    previous = {}
 defaults = json.loads(defaults_path.read_text())
+config = dict(defaults)
 install_root = os.environ["ROUTER_INSTALL_ROOT"]
 provider = os.environ["ROUTER_PROVIDER"]
-if os.environ["ROUTER_PROVIDER_EXPLICIT"] != "1" and config.get("provider") in {"codex", "openrouter"}:
-    provider = config["provider"]
+allowed_providers = {"codex", "openai", "openrouter", "llamacpp"}
+if os.environ["ROUTER_PROVIDER_EXPLICIT"] != "1" and previous.get("provider") in allowed_providers:
+    provider = previous["provider"]
 providers = list(dict.fromkeys(os.environ["ROUTER_PROVIDERS"].split(",")))
 if os.environ["ROUTER_PROVIDERS_EXPLICIT"] != "1":
-    existing = config.get("providers")
-    if isinstance(existing, list) and existing and all(item in {"codex", "openrouter"} for item in existing):
+    existing = previous.get("providers")
+    if isinstance(existing, list) and existing and all(item in allowed_providers for item in existing):
         providers = list(dict.fromkeys(existing))
 if provider not in providers:
     providers.insert(0, provider)
 codex_model = os.environ["ROUTER_CODEX_MODEL"]
-if os.environ["ROUTER_CODEX_MODEL_EXPLICIT"] != "1" and isinstance(config.get("codexModel"), str):
-    codex_model = config["codexModel"]
+if os.environ["ROUTER_CODEX_MODEL_EXPLICIT"] != "1" and previous.get("codexModel") in defaults.get("codexModels", []):
+    codex_model = previous["codexModel"]
+openai_model = os.environ["ROUTER_OPENAI_MODEL"]
+if os.environ["ROUTER_OPENAI_MODEL_EXPLICIT"] != "1" and isinstance(previous.get("openAIModel"), str):
+    openai_model = previous["openAIModel"]
 openrouter_model = os.environ["ROUTER_OPENROUTER_MODEL"]
-if os.environ["ROUTER_OPENROUTER_MODEL_EXPLICIT"] != "1" and isinstance(config.get("openRouterModel"), str):
-    openrouter_model = config["openRouterModel"]
+if os.environ["ROUTER_OPENROUTER_MODEL_EXPLICIT"] != "1" and isinstance(previous.get("openRouterModel"), str):
+    openrouter_model = previous["openRouterModel"]
+llamacpp_model = os.environ["ROUTER_LLAMACPP_MODEL"]
+if os.environ["ROUTER_LLAMACPP_MODEL_EXPLICIT"] != "1" and isinstance(previous.get("llamaCppModel"), str):
+    llamacpp_model = previous["llamaCppModel"]
+llamacpp_base_url = os.environ["ROUTER_LLAMACPP_BASE_URL"]
+if os.environ["ROUTER_LLAMACPP_BASE_URL_EXPLICIT"] != "1" and isinstance(previous.get("llamaCppBaseUrl"), str):
+    llamacpp_base_url = previous["llamaCppBaseUrl"]
+parsed_llamacpp = urlparse(llamacpp_base_url)
+if parsed_llamacpp.scheme not in {"http", "https"} or parsed_llamacpp.hostname not in {"127.0.0.1", "::1"} or parsed_llamacpp.username or parsed_llamacpp.password:
+    raise SystemExit("llama.cpp base URL must be an unauthenticated loopback HTTP endpoint")
+reasoning_values = {"minimal", "low", "medium", "high", "xhigh"}
+for key in ("codexReasoning", "openAIReasoning", "openRouterReasoning", "llamaCppReasoning"):
+    if previous.get(key) in reasoning_values:
+        config[key] = previous[key]
 config.update({
     "enabled": True,
     "autoRepair": True,
     "provider": provider,
     "providers": providers,
     "codexModel": codex_model,
+    "openAIModel": openai_model,
     "openRouterModel": openrouter_model,
+    "llamaCppModel": llamacpp_model,
+    "llamaCppBaseUrl": llamacpp_base_url,
     "codexModels": defaults.get("codexModels", []),
+    "openAIModels": defaults.get("openAIModels", []),
     "openRouterModels": defaults.get("openRouterModels", []),
+    "llamaCppModels": defaults.get("llamaCppModels", ["local"]),
     "runnerPath": f"{install_root}/run-provider.mjs",
     "nodePath": "/usr/bin/node",
     "statePath": f"{install_root}/conversation-states.json",
@@ -250,6 +313,7 @@ PY
 DEFAULT_PROVIDER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["provider"])' "$STAGE_ROOT/provider.json")"
 ENABLED_PROVIDERS="$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["providers"]))' "$STAGE_ROOT/provider.json")"
 CODEX_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codexModel"])' "$STAGE_ROOT/provider.json")"
+OPENAI_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["openAIModel"])' "$STAGE_ROOT/provider.json")"
 OPENROUTER_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["openRouterModel"])' "$STAGE_ROOT/provider.json")"
 
 emit_phase "INSTALL_DEPENDENCIES"
@@ -287,7 +351,7 @@ if [[ "$ENABLED_PROVIDERS" == *codex* ]]; then
       --fetch-timeout=30000)
   fi
 else
-  printf '[3/6] OpenRouter-only setup needs no dependency download\n'
+  printf '[3/6] Provider-only setup needs no Codex dependency download\n'
 fi
 
 emit_phase "ACTIVATE_RUNTIME"
@@ -319,9 +383,6 @@ PATCH_ARGS=(
   --manifest "$PATCH_MANIFEST"
   --json
 )
-if [[ "${ROUTER_ALLOW_UNKNOWN_HOST:-0}" == "1" ]]; then
-  PATCH_ARGS+=(--allow-unknown-host)
-fi
 ACTIVE_REGISTRY=""
 if CACHED_REGISTRY="$("$INSTALL_ROOT/bin/host-registry" verify 2>/dev/null || true)" && [[ -n "$CACHED_REGISTRY" ]]; then
   ACTIVE_REGISTRY="$CACHED_REGISTRY"
@@ -345,14 +406,9 @@ if ! ADAPTER_OUTPUT="$(run_adapter_patch 2>&1)"; then
   fi
 fi
 printf '%s\n' "$ADAPTER_OUTPUT"
-# Tell the desktop installer which trust tier accepted this host. A host that
-# is not on the exact signed list can still be accepted when it carries no
-# router marker, matches every source anchor exactly once, and passes the
-# read-only patch plus node --check. The untouched host is backed up first.
+# Tell the desktop installer which exact signed compatibility entry accepted
+# this host. Structural checks are diagnostic-only and never authorize writes.
 case "$ADAPTER_OUTPUT" in
-  *'"stockTrust": "anchor-verified"'*)
-    printf 'Host accepted by structural verification (anchor-verified stock host); stock backup saved.\n'
-    ;;
   *'"stockTrust": "exact-allowlist"'*)
     printf 'Host accepted from the exact signed compatibility list; stock backup saved.\n'
     ;;
@@ -394,7 +450,7 @@ else
 fi
 
 # Grok can replace the live host when it provisions a different Bot computer.
-# Keep the exact-hash/anchor gates authoritative and repair only a known stock
+# Keep the exact signed hash-and-byte gate authoritative and repair only a known stock
 # host. The watchdog also installs an XDG autostart entry so it returns when the
 # persisted Bot desktop is recreated.
 if [[ "$START_WATCHDOG" == "1" ]]; then
@@ -445,6 +501,12 @@ if [[ "$ENABLED_PROVIDERS" == *codex* ]]; then
 fi
 if [[ "$ENABLED_PROVIDERS" == *openrouter* ]]; then
   printf 'OpenRouter uses the OPENROUTER_API_KEY saved through Grok Bot Secrets.\n'
+fi
+if [[ "$ENABLED_PROVIDERS" == *openai* ]]; then
+  printf 'OpenAI uses the OPENAI_API_KEY saved through Grok Bot Secrets.\n'
+fi
+if [[ "$ENABLED_PROVIDERS" == *llamacpp* ]]; then
+  printf 'llama.cpp uses the configured loopback endpoint inside this Bot computer.\n'
 fi
 printf 'In Grok Bot chat, send /router doctor after the host reconnects.\n'
 

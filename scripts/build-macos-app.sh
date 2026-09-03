@@ -33,6 +33,7 @@ swiftc \
   -framework AppKit \
   -framework Vision \
   -framework CryptoKit \
+  -framework Security \
   "$PROJECT_ROOT/installer/GrokBotRouterInstaller.swift" \
   -o "$MACOS/GrokBotRouterInstaller"
 
