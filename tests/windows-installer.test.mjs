@@ -104,6 +104,9 @@ test("Windows renderer is isolated from Node and never stores provider keys", ()
   assert.doesNotMatch(html, /Bring your own brain\./);
   assert.match(html, /GROK BOT 0\.30\.0/);
   assert.doesNotMatch(html, /PRIVATE BETA/);
+  assert.match(html, /direct, metered API billing that is separate from ChatGPT\/Codex subscriptions/);
+  assert.match(renderer, /Use a metered API as the default/);
+  assert.match(renderer, /window\.confirm/);
 });
 
 test("Windows packaging covers both official architectures", () => {

@@ -189,6 +189,13 @@ print(f"OpenAI model: {config.get('openAIModel', 'not configured')}")
 print(f"OpenRouter model: {config.get('openRouterModel', 'not configured')}")
 print(f"llama.cpp model: {config.get('llamaCppModel', 'not configured')}")
 print(f"llama.cpp endpoint: {config.get('llamaCppBaseUrl', 'not configured')}")
+print("Billing: OpenAI/OpenRouter are direct metered APIs; Codex SDK uses Codex account authentication")
+print(
+    "Metered safety: "
+    f"sub-agents {'enabled' if config.get('meteredProviderAllowSubagents') is True else 'blocked'}, "
+    f"{config.get('meteredProviderMaxRequestsPerBotHour', 5)}/Bot/hour, "
+    f"{config.get('meteredProviderMaxRequestsRouterHour', 10)}/router/hour"
+)
 PY
     ;;
   doctor)

@@ -1,6 +1,14 @@
-# GrokRouter 0.1.0-beta.47
+# GrokRouter 0.1.0-beta.48
 
-Direct OpenAI support and a fail-closed provider/installer security boundary.
+Paid-provider incident containment and a fail-closed provider/installer security boundary.
+
+- Made the billing boundary explicit: Codex SDK uses Codex account authentication, while OpenAI and OpenRouter are direct metered APIs outside ChatGPT/Codex subscriptions.
+- Paid-provider selection now requires a two-step in-chat confirmation, and both installers require a separate warning confirmation before making a metered provider the default.
+- Added persistent atomic circuit breakers for metered providers: stable Bot identity, 80 transcript messages, 128 KiB request bodies, 2,048 output tokens, 5 requests per Bot/hour, 20 per Bot/day, 10 router-wide/hour, and 30 router-wide/day.
+- A missing meter is initialized securely; a corrupt, unreadable, locked, or unwritable meter fails closed instead of resetting allowance.
+- Paid sub-agents, delegation, and background continuations are blocked by default. Safety stops settle replay claims and produce `turn_blocked` receipts without sending the blocked request.
+- Existing Bots left on a beta.47 metered route are quarantined until their paid provider is explicitly reconfirmed under the beta.48 safety generation.
+- Added `provider_request_start` audit receipts plus normalized usage, request count, and request bytes on successful routed turns. These are operational evidence; provider dashboards remain authoritative for billed cost.
 
 - Added direct OpenAI Chat Completions with native function calls, per-Bot provider/model state, protected `OPENAI_API_KEY` storage, installer controls on macOS and Windows, management CLI status/Doctor output, and mock request/response coverage.
 - Refactored OpenRouter and OpenAI through an explicit provider registry. Their official base URLs are fixed, provider secret paths are fixed to Grok Bot Secrets, and reinstall discards unknown inherited configuration instead of carrying it into a privileged runtime.
@@ -10,7 +18,7 @@ Direct OpenAI support and a fail-closed provider/installer security boundary.
 - The macOS installer now verifies Grok Bot's exact bundle ID and Anysphere Team ID. Both platform installers use a random loopback diagnostic port, verify its process ownership, and validate the returned browser WebSocket endpoint before passing provider credentials.
 - Encoded the installer fallback sentinel so terminal OCR cannot mistake the visible shell command for a real failure. Safe diagnostic excerpts now retain up to 24 relevant lines.
 - Disabled the remote self-bootstrap path. Source installation builds only from the checkout the user selected and verified.
-- Beta.47 automated tests pass locally. The reviewed 27,734,440-byte stock host completed an exact-gated install, verified backup/Doctor, native-command registration, and deterministic OpenAI ↔ OpenRouter switching. Restore, a genuinely new Bot, and paid provider inference are still required before any broader live capability claim.
+- Beta.48 automated tests pass locally. The reviewed 27,734,440-byte stock host previously completed beta.47 exact-gated install, verified backup/Doctor, native-command registration, and deterministic OpenAI ↔ OpenRouter switching. Beta.48 has not been installed live; restore, a genuinely new Bot, and a zero-cost safety-stop receipt are still required before any broader live claim.
 
 # GrokRouter 0.1.0-beta.46
 

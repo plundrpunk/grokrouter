@@ -174,8 +174,8 @@ final class InstallerCardView: NSView {
 final class RouterInstallerController: NSObject, NSApplicationDelegate {
     private var window: NSWindow!
     private let codexCheckbox = NSButton(checkboxWithTitle: "Codex SDK", target: nil, action: nil)
-    private let openAICheckbox = NSButton(checkboxWithTitle: "OpenAI", target: nil, action: nil)
-    private let openRouterCheckbox = NSButton(checkboxWithTitle: "OpenRouter", target: nil, action: nil)
+    private let openAICheckbox = NSButton(checkboxWithTitle: "OpenAI (metered API)", target: nil, action: nil)
+    private let openRouterCheckbox = NSButton(checkboxWithTitle: "OpenRouter (metered API)", target: nil, action: nil)
     private let defaultProviderPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let codexModelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let openAIModelPopup = NSPopUpButton(frame: .zero, pullsDown: false)
@@ -267,8 +267,8 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             "google/gemini-3.1-pro-preview",
             "google/gemini-3.1-flash-lite"
         ])
-        openAIKeyField.placeholderString = "OpenAI API key (stored only in Grok Bot Secrets)"
-        openRouterKeyField.placeholderString = "OpenRouter API key (stored only in Grok Bot Secrets)"
+        openAIKeyField.placeholderString = "Metered OpenAI API key (stored only in Grok Bot Secrets)"
+        openRouterKeyField.placeholderString = "Metered OpenRouter API key (stored only in Grok Bot Secrets)"
 
         codexCheckbox.font = .systemFont(ofSize: 14, weight: .medium)
         openAICheckbox.font = .systemFont(ofSize: 14, weight: .medium)
@@ -288,7 +288,11 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             title: "Choose the models",
             detail: "New Bots start on the default. Each Bot can switch later."
         )
-        let modelStack = NSStackView(views: [modelSectionHeader, providerRow, defaultRow, codexRow, openAIRow, openAIKeyRow, openRouterRow, openRouterKeyRow])
+        let billingWarning = NSTextField(wrappingLabelWithString: "Billing: Codex SDK uses Codex account authentication. OpenAI and OpenRouter use direct, metered API billing that is separate from ChatGPT/Codex subscriptions. Paid sub-agents are blocked and request volume is capped by default.")
+        billingWarning.textColor = NSColor(calibratedRed: 1.0, green: 0.63, blue: 0.30, alpha: 1)
+        billingWarning.font = .systemFont(ofSize: 12, weight: .semibold)
+        billingWarning.maximumNumberOfLines = 3
+        let modelStack = NSStackView(views: [modelSectionHeader, billingWarning, providerRow, defaultRow, codexRow, openAIRow, openAIKeyRow, openRouterRow, openRouterKeyRow])
         modelStack.orientation = .vertical
         modelStack.alignment = .leading
         modelStack.spacing = 12
@@ -668,6 +672,16 @@ final class RouterInstallerController: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "OK")
             alert.runModal()
             return
+        }
+        if defaultProvider == "openai" || defaultProvider == "openrouter" {
+            let providerLabel = defaultProvider == "openai" ? "OpenAI" : "OpenRouter"
+            let alert = NSAlert()
+            alert.alertStyle = .critical
+            alert.messageText = "Use \(providerLabel) metered API billing?"
+            alert.informativeText = "This default sends direct API requests billed separately from ChatGPT and Codex subscriptions. GrokRouter blocks paid sub-agents and applies request caps, but API charges can still occur."
+            alert.addButton(withTitle: "Use metered API")
+            alert.addButton(withTitle: "Cancel")
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
         }
         openAIKeyField.stringValue = ""
         openRouterKeyField.stringValue = ""

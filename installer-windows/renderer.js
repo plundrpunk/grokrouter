@@ -25,8 +25,8 @@ function syncProviders() {
   const previous = elements.defaultProvider.value;
   elements.defaultProvider.replaceChildren();
   if (elements.codex.checked) elements.defaultProvider.add(new Option("Codex SDK", "codex"));
-  if (elements.openAI.checked) elements.defaultProvider.add(new Option("OpenAI", "openai"));
-  if (elements.openRouter.checked) elements.defaultProvider.add(new Option("OpenRouter", "openrouter"));
+  if (elements.openAI.checked) elements.defaultProvider.add(new Option("OpenAI (metered API)", "openai"));
+  if (elements.openRouter.checked) elements.defaultProvider.add(new Option("OpenRouter (metered API)", "openrouter"));
   if ([...elements.defaultProvider.options].some((option) => option.value === previous)) {
     elements.defaultProvider.value = previous;
   }
@@ -95,6 +95,10 @@ elements.install.addEventListener("click", () => {
   const key = elements.openRouterKey.value.trim();
   if (elements.openRouter.checked && key && !validOpenRouterKey(key)) {
     window.alert("That OpenRouter key does not look valid. Paste the complete key beginning with sk-or-v1-. Nothing has been saved or installed.");
+    return;
+  }
+  if (["openai", "openrouter"].includes(elements.defaultProvider.value)
+      && !window.confirm("Use a metered API as the default? OpenAI and OpenRouter API charges are separate from ChatGPT and Codex subscriptions. GrokRouter blocks paid sub-agents and applies request caps, but API charges can still occur.")) {
     return;
   }
   const providers = [elements.codex.checked && "codex", elements.openAI.checked && "openai", elements.openRouter.checked && "openrouter"].filter(Boolean);

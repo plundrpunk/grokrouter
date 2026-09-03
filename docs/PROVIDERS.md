@@ -1,21 +1,25 @@
 # Providers and extension contract
 
-GrokRouter beta.47 has one provider registry and two adapter families. Adding a provider means adding an explicit registry entry, configuration schema, credential policy, model validation, tests, and documentation. It does not mean accepting an arbitrary URL or secret path from inherited configuration.
+GrokRouter beta.48 has one provider registry and two adapter families. Adding a provider means adding an explicit registry entry, billing class, configuration schema, credential policy, model validation, tests, and documentation. It does not mean accepting an arbitrary URL or secret path from inherited configuration.
 
 ## Supported adapters
 
-| Provider ID | Transport | Credential | Endpoint policy | Current status |
-| --- | --- | --- | --- | --- |
-| `codex` | Pinned Codex SDK | Codex device sign-in inside the Bot computer | SDK-managed | Automated contract; prior beta live evidence only |
-| `openai` | OpenAI Chat Completions with native function calls | `OPENAI_API_KEY` in Grok Bot Secrets | Fixed to `https://api.openai.com/v1` | Automated contract; beta.47 live proof pending |
-| `openrouter` | OpenAI-compatible Chat Completions with native function calls | `OPENROUTER_API_KEY` in Grok Bot Secrets | Fixed to `https://openrouter.ai/api/v1` | Automated contract; prior beta live evidence only |
-| `llamacpp` | OpenAI-compatible Chat Completions with native function calls | None | Unauthenticated loopback HTTP(S) only | Development adapter; beta.47 live proof pending |
+| Provider ID | Billing class | Transport | Credential | Endpoint policy | Current status |
+| --- | --- | --- | --- | --- | --- |
+| `codex` | Codex account/subscription limits | Pinned Codex SDK | Codex device sign-in inside the Bot computer | SDK-managed | Automated contract; prior beta live evidence only |
+| `openai` | Direct metered API | OpenAI Chat Completions with native function calls | `OPENAI_API_KEY` in Grok Bot Secrets | Fixed to `https://api.openai.com/v1` | Automated contract; beta.48 live proof pending |
+| `openrouter` | Direct metered API | OpenAI-compatible Chat Completions with native function calls | `OPENROUTER_API_KEY` in Grok Bot Secrets | Fixed to `https://openrouter.ai/api/v1` | Automated contract; prior beta live evidence only |
+| `llamacpp` | Local compute | OpenAI-compatible Chat Completions with native function calls | None | Unauthenticated loopback HTTP(S) only | Development adapter; beta.48 live proof pending |
 
 The desktop installers expose Codex, OpenAI, and OpenRouter. llama.cpp is intentionally not in the beginner UI: `llama-server` must run inside the Grok Bot computer because `127.0.0.1` is evaluated there, not on the Mac or Windows desktop. Enable it through `remote/install.sh` only after that local service exists.
 
 ## Security rules
 
 - OpenAI and OpenRouter use fixed official base URLs. Legacy custom base-URL fields cause a runtime refusal instead of redirecting a credential or conversation.
+- OpenAI/OpenRouter selection is explicitly paid: the installers warn before choosing either as the default, and in-chat switching requires `/provider <id>` followed by `/provider <id> confirm-paid` within five minutes.
+- Existing per-Bot metered selections without the current safety-consent generation are quarantined. They make no provider request until the same two-step confirmation is completed.
+- Metered turns require a stable Bot/conversation identity. By default they reject paid sub-agents/background continuations and enforce 80 transcript messages, 128 KiB per request, 2,048 output tokens, 5 requests per Bot/hour, 20 per Bot/day, 10 router-wide/hour, and 30 router-wide/day.
+- Counters are atomically persisted before each HTTP attempt, including retries. They are local circuit breakers, not dollar accounting; configure provider-side project budgets and use provider usage/cost records for financial reconciliation.
 - Provider secrets come only from the provider's named environment variable or `/home/box/sand-data/box-secrets.json`. A custom secret-store path is rejected.
 - llama.cpp accepts only literal IPv4 or IPv6 loopback `http` or `https` endpoints with no URL username or password. Hostnames are rejected so local name resolution cannot redirect a request. It never receives an Authorization header.
 - Reinstall starts from packaged defaults and preserves only allowlisted provider, model, reasoning, and loopback llama.cpp fields. Unknown inherited fields are discarded.
@@ -40,7 +44,7 @@ A future bridge from the Mac to the Bot computer must be designed separately. Do
 
 ## FreeToken
 
-FreeToken's documented public integration is a native Swift SDK with device registration, model downloads, message threads, and callback-based tools. It is not documented as a generic OpenAI-compatible HTTP server, so beta.47 does not pretend it can use the compatibility adapter.
+FreeToken's documented public integration is a native Swift SDK with device registration, model downloads, message threads, and callback-based tools. It is not documented as a generic OpenAI-compatible HTTP server, so beta.48 does not pretend it can use the compatibility adapter.
 
 The safe future route is a dedicated, reviewed sidecar or native bridge that:
 

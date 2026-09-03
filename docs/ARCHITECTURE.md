@@ -30,7 +30,7 @@ An update follows the same path. Provider/model selections are preserved unless 
 
 ## Control turn
 
-The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/doctor`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. The payload also installs user-invocable skill descriptors under Grok's documented user skill root, which makes the six command families eligible for its native `/` suggestion menu. Those descriptors do not implement or authorize a control; the runtime remains the only command authority. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path.
+The normal composer is the control surface. `/models`, `/provider`, `/model`, `/reasoning`, `/doctor`, `/router doctor`, `/router reset` and their documented aliases are parsed before replay detection or provider inference. The payload also installs user-invocable skill descriptors under Grok's documented user skill root, which makes the six command families eligible for its native `/` suggestion menu. Those descriptors do not implement or authorize a control; the runtime remains the only command authority. In a channel, the parser also accepts a pure leading Bot address such as `@Research Bot /provider`; prose that merely mentions a command is not intercepted. A recognized command updates only that addressed Bot's state and returns a deterministic receipt through Grok's normal delivery path. Switching to `openai` or `openrouter` is a two-step operation: the first command persists a five-minute warning latch without changing provider, and only a matching `confirm-paid` command activates direct metered billing.
 
 The installer links only missing skill names or links already owned by the current GrokRouter installation. A pre-existing user skill wins, is never replaced, and is reported as a discovery conflict by Doctor. Removing GrokRouter removes only its own links. Command determinism comes from interception before inference, not from autocomplete registration. Invalid near-misses and unlisted bare model IDs also stop at the control plane instead of inviting a model to invent an answer.
 
@@ -40,9 +40,10 @@ The installer links only missing skill names or links already owned by the curre
 2. The small host adapter checks `provider.json`. If routing is disabled, the original inference path continues untouched.
 3. If enabled, the adapter launches the isolated Node runtime and sends sanitized JSON over stdin: config, transcript, tool schemas, and stable session identifiers.
 4. The runtime selects the provider stored for that Bot.
-5. Codex starts/resumes an SDK thread; OpenAI, OpenRouter, or loopback llama.cpp receives a Chat Completions request with native function schemas.
-6. A normal text response is wrapped in Grok's user-delivery tool. A provider tool request is returned to Grok for execution.
-7. Grok executes computer/browser/file/orchestration tools in its existing host. Their results re-enter the transcript and the same provider thread continues.
+5. For a metered provider, the runtime first rejects unstable identity, oversized transcripts, and paid sub-agent/background turns. Immediately before every HTTP attempt it atomically reserves request quota and enforces request/output limits.
+6. Codex starts/resumes an SDK thread; OpenAI, OpenRouter, or loopback llama.cpp receives a Chat Completions request with native function schemas.
+7. A normal text response is wrapped in Grok's user-delivery tool. A provider tool request is returned to Grok for execution.
+8. Grok executes computer/browser/file/orchestration tools in its existing host. Their results re-enter the transcript and the same provider thread continues.
 
 Grok's ordinary hidden continuation prompts are filtered so a native tool result is not mistaken for another user request. A visible status message or permission bubble does not count as completion while an outer tool call remains unresolved; the matching result must still resume the provider. Every suppressed turn is recorded with a bounded reason and non-secret protocol IDs so a host-side approval gap cannot look like a silent provider failure.
 
@@ -74,6 +75,8 @@ Grok messages are converted to OpenAI-compatible roles/content. Outer tools beco
 
 Each provider definition owns its endpoint and request differences. OpenAI is fixed to `https://api.openai.com/v1`; OpenRouter is fixed to `https://openrouter.ai/api/v1`; llama.cpp accepts only an unauthenticated loopback HTTP(S) base URL. Inherited custom official-provider URLs or secret paths are rejected, and the installer rebuilds effective configuration from packaged defaults plus a small allowlist.
 
+Provider definitions also carry a billing class. `codex` is account-authenticated, `llamacpp` is local, and `openai`/`openrouter` are metered. The metered path defaults to 80 transcript messages, 128 KiB serialized requests, 2,048 output tokens, 5 requests per Bot/hour, 20 per Bot/day, 10 router-wide/hour, and 30 router-wide/day. Its counters are stored with mode `0600` and updated by atomic rename under a cross-process lock before each request attempt. A missing meter is initialized; a corrupt, unreadable, locked, or unwritable meter fails closed. Quota, preflight, and size failures become deterministic `turn_blocked` receipts and settle replay claims without reaching the provider.
+
 An explicit OpenRouter delegation request is provider-aware. If Grok offered a dedicated sub-agent tool, that tool is forced on the first round; otherwise an offered `GetDynamicTools` broker is forced so the model discovers the real orchestration schema before calling it. If Grok exposed no actionable schema, the provider is told that it cannot launch a real child and must not invent a launch or completion. This improves use of available orchestration without weakening the rule that the router cannot create tool authority the host did not supply.
 
 An otherwise empty OpenRouter response is retried once. If it occurs while reviving a completed background task, the adapter returns the tagged child-completion text deterministically rather than losing the result. An ordinary empty response still fails closed after the retry.
@@ -103,6 +106,7 @@ The exact beta.38 artifact passed install, verified stock restore and post-resto
 ## Trust and data boundaries
 
 - Provider credentials enter through the installer and Grok Bot's protected Secrets store. They are loaded at request time and are excluded from state, repository files and audit output.
+- ChatGPT/Codex subscription billing and direct API billing are separate. The local metered counters bound attempts but cannot replace provider-side project budgets or authoritative cost reporting.
 - The selected provider receives the conversation and media required for that routed turn. Selecting another provider changes this data recipient.
 - Grok remains the executor and permission boundary for outer tools. The provider receives tool results only after Grok executes an offered tool.
 - The child runtime receives an explicit environment allowlist instead of the full host environment.

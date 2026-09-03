@@ -8,12 +8,23 @@ const MAX_INPUT_BYTES = 50 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 const MAX_IMAGES_PER_TURN = 4;
 const MAX_TOOLS = 128;
-const ROUTER_VERSION = "0.1.0-beta.47";
+const ROUTER_VERSION = "0.1.0-beta.48";
+const METERED_PROVIDER_CONSENT_GENERATION = "metered-safety-v1";
 const GROK_SECRET_STORE_PATH = "/home/box/sand-data/box-secrets.json";
+const METERED_PROVIDER_DEFAULTS = Object.freeze({
+  maxTranscriptMessages: 80,
+  maxRequestBytes: 128 * 1024,
+  maxOutputTokens: 2048,
+  maxRequestsPerBotHour: 5,
+  maxRequestsPerBotDay: 20,
+  maxRequestsRouterHour: 10,
+  maxRequestsRouterDay: 30,
+});
 const PROVIDER_DEFINITIONS = Object.freeze({
   codex: Object.freeze({
     label: "Codex SDK",
     transport: "codex-sdk",
+    billing: "subscription",
     modelKey: "codexModel",
     modelsKey: "codexModels",
     reasoningKey: "codexReasoning",
@@ -22,6 +33,7 @@ const PROVIDER_DEFINITIONS = Object.freeze({
   openai: Object.freeze({
     label: "OpenAI",
     transport: "openai-chat",
+    billing: "metered",
     modelKey: "openAIModel",
     modelsKey: "openAIModels",
     reasoningKey: "openAIReasoning",
@@ -32,6 +44,7 @@ const PROVIDER_DEFINITIONS = Object.freeze({
   openrouter: Object.freeze({
     label: "OpenRouter",
     transport: "openai-chat",
+    billing: "metered",
     modelKey: "openRouterModel",
     modelsKey: "openRouterModels",
     reasoningKey: "openRouterReasoning",
@@ -42,6 +55,7 @@ const PROVIDER_DEFINITIONS = Object.freeze({
   llamacpp: Object.freeze({
     label: "llama.cpp",
     transport: "openai-chat",
+    billing: "local",
     modelKey: "llamaCppModel",
     modelsKey: "llamaCppModels",
     reasoningKey: "llamaCppReasoning",
@@ -1203,6 +1217,10 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
         ? {}
         : { reasoning: { effort: config[definition.reasoningKey] || "medium" } }),
       ...(config.adapterSessionId ? { session_id: config.adapterSessionId } : {}),
+      max_tokens: positiveLimit(
+        config.meteredProviderMaxOutputTokens,
+        METERED_PROVIDER_DEFAULTS.maxOutputTokens,
+      ),
     } : {}),
     // OpenAI's Chat Completions endpoint rejects function tools combined with a
     // reasoning effort for the gpt-5.6 family (400: "set reasoning_effort to
@@ -1210,6 +1228,10 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
     // tools are present and the configured effort only on tool-free turns.
     ...(provider === "openai"
       ? {
+        max_completion_tokens: positiveLimit(
+          config.meteredProviderMaxOutputTokens,
+          METERED_PROVIDER_DEFAULTS.maxOutputTokens,
+        ),
         reasoning_effort: offeredTools.length
           ? "none"
           : (["minimal", "low", "medium", "high", "xhigh"].includes(config[definition.reasoningKey])
@@ -1218,8 +1240,17 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
       }
       : {}),
   };
+  let providerRequestCount = 0;
+  let providerRequestBytes = 0;
   const baseUrl = providerBaseUrl(config, provider);
   const request = async (requestBody) => {
+    const serializedBody = JSON.stringify(requestBody);
+    const requestBytes = Buffer.byteLength(serializedBody);
+    if (typeof config.beforeProviderRequest === "function") {
+      await config.beforeProviderRequest({ provider, model, requestBytes });
+    }
+    providerRequestCount += 1;
+    providerRequestBytes += requestBytes;
     const response = await fetchImpl(`${baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -1227,7 +1258,7 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
         "Content-Type": "application/json",
         ...(provider === "openrouter" ? { "X-Title": "GrokRouter" } : {}),
       },
-      body: JSON.stringify(requestBody),
+      body: serializedBody,
       signal: AbortSignal.timeout(Number(config.timeoutMs || 15 * 60_000)),
     });
     const payload = await response.json().catch(() => ({}));
@@ -1291,6 +1322,8 @@ async function runOpenAIChatProvider(provider, config, messages, tools, fetchImp
     retriedEmpty,
     recoveredTextualToolCall: completion.recoveredTextualToolCall,
     textualToolDiagnostics: completion.textualToolDiagnostics,
+    providerRequestCount,
+    providerRequestBytes,
   };
 }
 
@@ -1797,6 +1830,9 @@ async function stateForTurn(config, messages, sessionOptions) {
       threadId: null,
       threadEpoch: 0,
       tools: [],
+      ...(providerDefinition(provider).billing === "metered"
+        ? { meteredProviderConsentGeneration: METERED_PROVIDER_CONSENT_GENERATION }
+        : {}),
     };
     state = await mutateState(config, key, state, (current) => current);
   }
@@ -1832,6 +1868,211 @@ async function appendAudit(config, event) {
     await appendFile(pathname, line, { mode: 0o600 });
   } catch {
     // Diagnostics must never break a user turn.
+  }
+}
+
+class MeteredProviderSafetyError extends Error {
+  constructor(reason, message) {
+    super(message);
+    this.name = "MeteredProviderSafetyError";
+    this.reason = reason;
+  }
+}
+
+function positiveLimit(value, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function meteredProviderLimits(config) {
+  return {
+    maxTranscriptMessages: positiveLimit(
+      config.meteredProviderMaxTranscriptMessages,
+      METERED_PROVIDER_DEFAULTS.maxTranscriptMessages,
+    ),
+    maxRequestBytes: positiveLimit(
+      config.meteredProviderMaxRequestBytes,
+      METERED_PROVIDER_DEFAULTS.maxRequestBytes,
+    ),
+    maxOutputTokens: positiveLimit(
+      config.meteredProviderMaxOutputTokens,
+      METERED_PROVIDER_DEFAULTS.maxOutputTokens,
+    ),
+    maxRequestsPerBotHour: positiveLimit(
+      config.meteredProviderMaxRequestsPerBotHour,
+      METERED_PROVIDER_DEFAULTS.maxRequestsPerBotHour,
+    ),
+    maxRequestsPerBotDay: positiveLimit(
+      config.meteredProviderMaxRequestsPerBotDay,
+      METERED_PROVIDER_DEFAULTS.maxRequestsPerBotDay,
+    ),
+    maxRequestsRouterHour: positiveLimit(
+      config.meteredProviderMaxRequestsRouterHour,
+      METERED_PROVIDER_DEFAULTS.maxRequestsRouterHour,
+    ),
+    maxRequestsRouterDay: positiveLimit(
+      config.meteredProviderMaxRequestsRouterDay,
+      METERED_PROVIDER_DEFAULTS.maxRequestsRouterDay,
+    ),
+  };
+}
+
+function objectHasTrueSubagentMarker(value, depth = 0, seen = new Set()) {
+  if (depth > 5 || value == null || typeof value !== "object" || seen.has(value)) return false;
+  seen.add(value);
+  for (const [key, child] of Object.entries(value)) {
+    const normalized = normalizedIdentityKey(key);
+    if (["issubagent", "isbrowserusesubagent", "iscomputerusesubagent"].includes(normalized)
+      && child === true) return true;
+    if (normalized === "parentagenttoolcallid"
+      && typeof child === "string" && child.trim()) return true;
+    if (child && typeof child === "object" && objectHasTrueSubagentMarker(child, depth + 1, seen)) return true;
+  }
+  return false;
+}
+
+function meteredTurnBlockReason(config, state, messages, sessionOptions, identity, automationContinuation) {
+  if (providerDefinition(state.provider).billing !== "metered") return "";
+  if (config.meteredProviderRequireChatConfirmation !== false
+      && state.meteredProviderConsentGeneration !== METERED_PROVIDER_CONSENT_GENERATION) {
+    return "metered-provider-reconfirmation-required";
+  }
+  const limits = meteredProviderLimits(config);
+  if (messages.length > limits.maxTranscriptMessages) return "metered-transcript-message-limit";
+  if (["content-fallback", "request-fallback"].includes(identity.source)) return "metered-unstable-identity";
+  if (config.meteredProviderAllowSubagents !== true) {
+    if (automationContinuation || objectHasTrueSubagentMarker(sessionOptions)) return "metered-subagent-disabled";
+    if (/\b(?:sub[ -]?agent|delegate|delegation|background agent|parallel agent)\b/i.test(latestUserText(messages))) {
+      return "metered-subagent-disabled";
+    }
+  }
+  return "";
+}
+
+function meteredSafetyText(reason) {
+  const explanation = {
+    "metered-subagent-disabled": "Autonomous sub-agent turns are disabled for metered providers.",
+    "metered-provider-reconfirmation-required": "This Bot's paid-provider selection predates the current safety controls and must be confirmed again.",
+    "metered-unstable-identity": "This turn does not have a stable Bot or conversation identity.",
+    "metered-transcript-message-limit": "This Grok transcript is too large to resend safely to a metered provider.",
+    "metered-request-byte-limit": "This request is too large to send safely to a metered provider.",
+    "metered-bot-hour-limit": "This Bot reached its hourly metered-provider request limit.",
+    "metered-bot-day-limit": "This Bot reached its daily metered-provider request limit.",
+    "metered-router-hour-limit": "GrokRouter reached its router-wide hourly metered-provider request limit.",
+    "metered-router-day-limit": "GrokRouter reached its router-wide daily metered-provider request limit.",
+    "metered-usage-state-unavailable": "The local paid-request meter could not be read or updated safely.",
+  }[reason] || "The metered-provider safety gate stopped this turn.";
+  return `Paid-provider safety stop: ${explanation} The blocked request was not sent. Use Codex SDK or local llama.cpp, or deliberately adjust the documented safety limit.`;
+}
+
+function meteredUsagePath(config) {
+  if (config.meteredUsagePath) return config.meteredUsagePath;
+  if (config.stateDirectory) return join(config.stateDirectory, "metered-usage.json");
+  if (config.statePath) return join(dirname(config.statePath), "metered-usage.json");
+  return join(runtimeDirectory, "metered-usage.json");
+}
+
+async function withFileLock(pathname, operation) {
+  const lockPath = `${pathname}.lock`;
+  await mkdir(dirname(lockPath), { recursive: true });
+  const deadline = Date.now() + 30_000;
+  while (true) {
+    try {
+      await mkdir(lockPath);
+      break;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const details = await stat(lockPath).catch(() => null);
+      if (details && Date.now() - details.mtimeMs > 120_000) {
+        await rm(lockPath, { recursive: true, force: true });
+        continue;
+      }
+      if (Date.now() >= deadline) throw new Error("Timed out waiting for the metered-provider safety lock");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+  try {
+    return await operation();
+  } finally {
+    await rm(lockPath, { recursive: true, force: true });
+  }
+}
+
+async function reserveMeteredProviderRequest(config, sessionId, requestBytes) {
+  const limits = meteredProviderLimits(config);
+  if (requestBytes > limits.maxRequestBytes) {
+    throw new MeteredProviderSafetyError("metered-request-byte-limit", meteredSafetyText("metered-request-byte-limit"));
+  }
+  const pathname = meteredUsagePath(config);
+  try {
+    return await withFileLock(pathname, async () => {
+      let usage = {};
+      try {
+        const raw = await readFile(pathname, "utf8");
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) usage = parsed;
+        else throw new Error("Metered usage state must be an object");
+      } catch (error) {
+        if (error?.code !== "ENOENT") {
+          throw new MeteredProviderSafetyError(
+            "metered-usage-state-unavailable",
+            meteredSafetyText("metered-usage-state-unavailable"),
+          );
+        }
+      }
+      const now = new Date();
+      const dayBucket = now.toISOString().slice(0, 10);
+      const hourBucket = now.toISOString().slice(0, 13);
+      if (usage.dayBucket !== dayBucket) {
+        usage.dayBucket = dayBucket;
+        usage.dayRequests = 0;
+        usage.bots = {};
+      }
+      if (usage.hourBucket !== hourBucket) {
+        usage.hourBucket = hourBucket;
+        usage.hourRequests = 0;
+      }
+      usage.bots = usage.bots && typeof usage.bots === "object" && !Array.isArray(usage.bots) ? usage.bots : {};
+      const bot = usage.bots[sessionId] && typeof usage.bots[sessionId] === "object" ? usage.bots[sessionId] : {};
+      if (bot.dayBucket !== dayBucket) {
+        bot.dayBucket = dayBucket;
+        bot.dayRequests = 0;
+      }
+      if (bot.hourBucket !== hourBucket) {
+        bot.hourBucket = hourBucket;
+        bot.hourRequests = 0;
+      }
+      const checks = [
+        [Number(bot.hourRequests || 0), limits.maxRequestsPerBotHour, "metered-bot-hour-limit"],
+        [Number(bot.dayRequests || 0), limits.maxRequestsPerBotDay, "metered-bot-day-limit"],
+        [Number(usage.hourRequests || 0), limits.maxRequestsRouterHour, "metered-router-hour-limit"],
+        [Number(usage.dayRequests || 0), limits.maxRequestsRouterDay, "metered-router-day-limit"],
+      ];
+      const exceeded = checks.find(([count, limit]) => count >= limit);
+      if (exceeded) throw new MeteredProviderSafetyError(exceeded[2], meteredSafetyText(exceeded[2]));
+      bot.hourRequests = Number(bot.hourRequests || 0) + 1;
+      bot.dayRequests = Number(bot.dayRequests || 0) + 1;
+      usage.hourRequests = Number(usage.hourRequests || 0) + 1;
+      usage.dayRequests = Number(usage.dayRequests || 0) + 1;
+      usage.bots[sessionId] = bot;
+      const temporary = `${pathname}.${process.pid}.${randomUUID()}.tmp`;
+      await mkdir(dirname(pathname), { recursive: true });
+      await writeFile(temporary, `${JSON.stringify(usage, null, 2)}\n`, { mode: 0o600 });
+      await rename(temporary, pathname);
+      return {
+        requestBytes,
+        botHourRequests: bot.hourRequests,
+        botDayRequests: bot.dayRequests,
+        routerHourRequests: usage.hourRequests,
+        routerDayRequests: usage.dayRequests,
+      };
+    });
+  } catch (error) {
+    if (error instanceof MeteredProviderSafetyError) throw error;
+    throw new MeteredProviderSafetyError(
+      "metered-usage-state-unavailable",
+      meteredSafetyText("metered-usage-state-unavailable"),
+    );
   }
 }
 
@@ -1931,6 +2172,11 @@ async function doctorText(config, state) {
   checks.push(`Router ${ROUTER_VERSION}: OK`);
   checks.push(`Provider: ${providerLabel(state.provider)} (${state.model})`);
   checks.push(`Runtime: Node ${process.version}`);
+  if (configuredProviders(config).some((provider) => providerDefinition(provider).billing === "metered")) {
+    const limits = meteredProviderLimits(config);
+    checks.push(`Metered-provider safety: sub-agents ${config.meteredProviderAllowSubagents === true ? "explicitly enabled" : "blocked"}; ${limits.maxRequestsPerBotHour}/Bot/hour; ${limits.maxRequestsRouterHour}/router/hour; ${limits.maxRequestBytes} bytes/request; ${limits.maxOutputTokens} output tokens`);
+    checks.push("Billing boundary: OpenAI and OpenRouter use direct API billing; only Codex SDK uses Codex account authentication.");
+  }
   for (const provider of configuredProviders(config).filter((candidate) => providerDefinition(candidate).secretName)) {
     const definition = providerDefinition(provider);
     try {
@@ -1980,6 +2226,7 @@ async function controlResult(config, key, state, input) {
     return result([
       "GrokRouter controls:",
       `• /provider ${availableProviders} — switch this bot`,
+      "• OpenAI/OpenRouter are metered API providers; switching to one requires a second /provider <id> confirm-paid command",
       "• /provider — show active provider",
       "• /models — list configured models",
       "• /model <id> — switch this bot's model",
@@ -2001,11 +2248,36 @@ async function controlResult(config, key, state, input) {
     });
     return result("Provider thread reset. The Grok transcript remains available and will seed the next turn.");
   }
-  const providerMatch = normalized.match(/^\/(?:provider|router)\s+([a-z0-9][a-z0-9._-]*)$/i);
+  const providerMatch = normalized.match(/^\/(?:provider|router)\s+([a-z0-9][a-z0-9._-]*)(?:\s+(confirm-paid))?$/i);
   if (providerMatch) {
     const provider = providerMatch[1].toLowerCase();
+    const confirmedPaid = providerMatch[2]?.toLowerCase() === "confirm-paid";
     const allowed = configuredProviders(config);
     if (!allowed.includes(provider)) return result(`Provider “${provider}” is not enabled. Available: ${allowed.join(", ")}.`);
+    const meteredConfirmationRequired = providerDefinition(provider).billing === "metered"
+      && config.meteredProviderRequireChatConfirmation !== false
+      && (provider !== state.provider
+        || state.meteredProviderConsentGeneration !== METERED_PROVIDER_CONSENT_GENERATION);
+    if (meteredConfirmationRequired) {
+      const pending = state.meteredProviderPendingConfirmation;
+      const pendingFresh = pending?.provider === provider
+        && Number(pending?.requestedAt || 0) > 0
+        && Date.now() - Number(pending.requestedAt) < 5 * 60_000;
+      if (!confirmedPaid || !pendingFresh) {
+        await persist({ meteredProviderPendingConfirmation: { provider, requestedAt: Date.now() } });
+        return result(`${providerLabel(provider)} uses metered API billing; a ChatGPT/Codex subscription does not cover these requests. No provider was changed. To accept direct API charges, send /provider ${provider} confirm-paid within five minutes.`);
+      }
+    }
+    if (provider === state.provider) {
+      if (meteredConfirmationRequired) {
+        await persist({
+          meteredProviderConsentGeneration: METERED_PROVIDER_CONSENT_GENERATION,
+          meteredProviderPendingConfirmation: null,
+        });
+        return result(`${providerLabel(provider)} metered API billing is confirmed for this bot. Model: ${state.model}. Reasoning: ${state.reasoning}.`);
+      }
+      return result(`${providerLabel(state.provider)} is already active for this bot. Model: ${state.model}. Reasoning: ${state.reasoning}.`);
+    }
     const previous = `${providerLabel(state.provider)} (${state.model})`;
     const model = defaultModel(config, provider);
     const reasoning = defaultReasoning(config, provider);
@@ -2015,6 +2287,10 @@ async function controlResult(config, key, state, input) {
       reasoning,
       threadId: null,
       threadEpoch: Number(state.threadEpoch || 0) + 1,
+      meteredProviderPendingConfirmation: null,
+      ...(providerDefinition(provider).billing === "metered"
+        ? { meteredProviderConsentGeneration: METERED_PROVIDER_CONSENT_GENERATION }
+        : {}),
     });
     const output = result(`Switched this bot from ${previous} to ${providerLabel(provider)} (${model}). Its Grok transcript is preserved.`);
     output.provider = provider;
@@ -2240,6 +2516,18 @@ export async function runTurn(input, dependencies = {}) {
     codexThreadId: state.threadId,
     adapterSessionId: state.sessionId,
   };
+  if (activeDefinition.billing === "metered") {
+    turnConfig.beforeProviderRequest = async ({ provider, model, requestBytes }) => {
+      const quota = await reserveMeteredProviderRequest(config, state.sessionId, requestBytes);
+      await appendAudit(config, {
+        event: "provider_request_start",
+        sessionId: state.sessionId,
+        provider,
+        model,
+        ...quota,
+      });
+    };
+  }
   const threadEpoch = Number(state.threadEpoch || 0);
   await appendAudit(config, {
     event: "turn_start",
@@ -2264,48 +2552,82 @@ export async function runTurn(input, dependencies = {}) {
     messageShapes: messages.slice(-16).map(auditMessageShape),
   });
   let result;
-  try {
-    result = state.provider === "codex"
-      ? await runCodex(turnConfig, messages, effectiveTools, dependencies.codexFactory)
-      : await runOpenAIChatProvider(state.provider, turnConfig, messages, effectiveTools, dependencies.fetchImpl);
-    if (result.emptyResponse) {
-      const completion = latestAutomationCompletion(messages);
-      if (automationContinuation && completion?.text) {
-        result = { ...result, text: completion.text, emptyResponse: false, emptyRecovery: "automation-completion" };
-      } else if (transcriptHasToolCall(messages, "CallDynamicTool")) {
+  const preflightSafetyReason = meteredTurnBlockReason(
+    config,
+    state,
+    messages,
+    sessionOptions,
+    identity,
+    automationContinuation,
+  );
+  if (preflightSafetyReason) {
+    result = {
+      text: preflightSafetyReason === "metered-provider-reconfirmation-required"
+        ? `${meteredSafetyText(preflightSafetyReason)} Send /provider ${state.provider}, then /provider ${state.provider} confirm-paid within five minutes.`
+        : meteredSafetyText(preflightSafetyReason),
+      toolCalls: [],
+      usage: normalizeUsage(null),
+      model: state.model,
+      safetyBlocked: true,
+      safetyReason: preflightSafetyReason,
+      providerRequestCount: 0,
+      providerRequestBytes: 0,
+    };
+  } else {
+    try {
+      result = state.provider === "codex"
+        ? await runCodex(turnConfig, messages, effectiveTools, dependencies.codexFactory)
+        : await runOpenAIChatProvider(state.provider, turnConfig, messages, effectiveTools, dependencies.fetchImpl);
+      if (result.emptyResponse) {
+        const completion = latestAutomationCompletion(messages);
+        if (automationContinuation && completion?.text) {
+          result = { ...result, text: completion.text, emptyResponse: false, emptyRecovery: "automation-completion" };
+        } else if (transcriptHasToolCall(messages, "CallDynamicTool")) {
+          result = {
+            ...result,
+            text: "Background task launched. I’ll report its finished result when it arrives.",
+            emptyResponse: false,
+            emptyRecovery: "dynamic-task-wait",
+          };
+        } else {
+          throw new Error(`${providerLabel(state.provider)} returned an empty response after one retry`);
+        }
+      }
+      result.toolCalls = rewriteHostToolCallIds(result.toolCalls);
+    } catch (error) {
+      if (error instanceof MeteredProviderSafetyError) {
         result = {
-          ...result,
-          text: "Background task launched. I’ll report its finished result when it arrives.",
-          emptyResponse: false,
-          emptyRecovery: "dynamic-task-wait",
+          text: meteredSafetyText(error.reason),
+          toolCalls: [],
+          usage: normalizeUsage(null),
+          model: state.model,
+          safetyBlocked: true,
+          safetyReason: error.reason,
         };
       } else {
-        throw new Error(`${providerLabel(state.provider)} returned an empty response after one retry`);
+        if (turnClaimed) {
+          await mutateState(config, key, state, (current) => current.activeTurnFingerprint === turnFingerprint
+            ? { ...current, activeTurnFingerprint: null, activeTurnClaimedAt: null }
+            : current).catch(() => {});
+        }
+        if (continuationClaimed) {
+          await mutateState(config, key, state, (current) => {
+            const claims = { ...(current.automationContinuationClaims || {}) };
+            delete claims[continuationSignature];
+            return { ...current, automationContinuationClaims: claims };
+          }).catch(() => {});
+        }
+        const diagnostic = redactDiagnostic(error?.message || error);
+        await appendAudit(config, {
+          event: "turn_error",
+          sessionId: state.sessionId,
+          provider: state.provider,
+          model: state.model,
+          error: diagnostic,
+        });
+        throw error;
       }
     }
-    result.toolCalls = rewriteHostToolCallIds(result.toolCalls);
-  } catch (error) {
-    if (turnClaimed) {
-      await mutateState(config, key, state, (current) => current.activeTurnFingerprint === turnFingerprint
-        ? { ...current, activeTurnFingerprint: null, activeTurnClaimedAt: null }
-        : current).catch(() => {});
-    }
-    if (continuationClaimed) {
-      await mutateState(config, key, state, (current) => {
-        const claims = { ...(current.automationContinuationClaims || {}) };
-        delete claims[continuationSignature];
-        return { ...current, automationContinuationClaims: claims };
-      }).catch(() => {});
-    }
-    const diagnostic = redactDiagnostic(error?.message || error);
-    await appendAudit(config, {
-      event: "turn_error",
-      sessionId: state.sessionId,
-      provider: state.provider,
-      model: state.model,
-      error: diagnostic,
-    });
-    throw error;
   }
   if (result.threadId) {
     state.threadId = result.threadId;
@@ -2346,10 +2668,11 @@ export async function runTurn(input, dependencies = {}) {
   }
   await recordToolLinks(config, key, result.toolCalls);
   await appendAudit(config, {
-    event: "turn_ok",
+    event: result.safetyBlocked ? "turn_blocked" : "turn_ok",
     sessionId: state.sessionId,
     provider: state.provider,
     model: result.model || state.model,
+    ...(result.safetyReason ? { reason: result.safetyReason } : {}),
     responseCharacters: result.text?.length || 0,
     toolCallCount: result.toolCalls?.length || 0,
     toolNames: (result.toolCalls || []).map((call) => call.toolName).filter(Boolean),
@@ -2357,6 +2680,13 @@ export async function runTurn(input, dependencies = {}) {
     ...(result.emptyRecovery ? { emptyRecovery: result.emptyRecovery } : {}),
     ...(result.recoveredTextualToolCall ? { recoveredTextualToolCall: true } : {}),
     ...(result.textualToolDiagnostics ? { textualToolDiagnostics: result.textualToolDiagnostics } : {}),
+    usage: normalizeUsage(result.usage),
+    ...(Number.isSafeInteger(result.providerRequestCount)
+      ? { providerRequestCount: result.providerRequestCount }
+      : {}),
+    ...(Number.isSafeInteger(result.providerRequestBytes)
+      ? { providerRequestBytes: result.providerRequestBytes }
+      : {}),
   });
   const {
     emptyResponse: _emptyResponse,
@@ -2364,6 +2694,10 @@ export async function runTurn(input, dependencies = {}) {
     emptyRecovery: _emptyRecovery,
     recoveredTextualToolCall: _recoveredTextualToolCall,
     textualToolDiagnostics: _textualToolDiagnostics,
+    safetyBlocked: _safetyBlocked,
+    safetyReason: _safetyReason,
+    providerRequestCount: _providerRequestCount,
+    providerRequestBytes: _providerRequestBytes,
     ...publicResult
   } = result;
   return { ok: true, provider: state.provider, ...publicResult };

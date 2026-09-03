@@ -454,6 +454,7 @@ test("OpenRouter uses a secret without returning it and preserves function calls
     assert.equal(request.body.messages[0].role, "system");
     assert.match(request.body.messages[0].content, /active model is anthropic\/claude-sonnet-test/);
     assert.match(request.body.messages[0].content, /\/models/);
+    assert.equal(request.body.max_tokens, 2048);
     assert.equal(request.body.tools[0].function.name, "Computer");
     assert.deepEqual(result.toolCalls[0].args, { action: "screenshot" });
     assert.equal(JSON.stringify(result).includes(TEST_OPENROUTER_KEY), false);
@@ -488,6 +489,7 @@ test("OpenAI uses only the official endpoint and keeps its key out of results", 
     assert.equal(request.init.headers.Authorization, `Bearer ${TEST_OPENAI_KEY}`);
     assert.equal(request.init.headers["X-Title"], undefined);
     assert.equal(request.body.reasoning_effort, "none");
+    assert.equal(request.body.max_completion_tokens, 2048);
     assert.match(request.body.messages[0].content, /active provider is OpenAI/);
     assert.equal(result.toolCalls[0].toolName, "Computer");
     assert.equal(JSON.stringify(result).includes(TEST_OPENAI_KEY), false);
@@ -1245,9 +1247,16 @@ test("per-Bot state is isolated and atomically persisted", async () => {
     auditPath: join(root, "audit.jsonl"),
   };
   try {
-    const first = await runTurn({
+    const warning = await runTurn({
       config,
       messages: [user("/provider openrouter")],
+      sessionOptions: { botId: "bot-one" },
+    });
+    assert.equal(warning.provider, "codex");
+    assert.match(warning.text, /metered API billing/);
+    const first = await runTurn({
+      config,
+      messages: [user("/provider openrouter confirm-paid")],
       sessionOptions: { botId: "bot-one" },
     });
     const second = await runTurn({
@@ -1277,9 +1286,16 @@ test("provider controls switch through the explicit OpenAI-compatible registry",
     auditPath: join(root, "audit.jsonl"),
   };
   try {
-    const openAI = await runTurn({
+    const warning = await runTurn({
       config,
       messages: [user("/provider openai")],
+      sessionOptions: { botId: "provider-registry-bot" },
+    });
+    assert.equal(warning.provider, "codex");
+    assert.match(warning.text, /No provider was changed/);
+    const openAI = await runTurn({
+      config,
+      messages: [user("/provider openai confirm-paid")],
       sessionOptions: { botId: "provider-registry-bot" },
     });
     assert.equal(openAI.provider, "openai");
@@ -1299,6 +1315,54 @@ test("provider controls switch through the explicit OpenAI-compatible registry",
       sessionOptions: { botId: "provider-registry-bot" },
     });
     assert.match(status.text, /llama\.cpp is active/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an existing paid-provider Bot must reconfirm after the safety upgrade", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-metered-reconfirm-"));
+  const config = {
+    provider: "openrouter",
+    providers: ["codex", "openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  let requests = 0;
+  try {
+    await runTurn({
+      config,
+      messages: [user("/provider")],
+      sessionOptions: { botId: "pre-safety-paid-bot" },
+    });
+    const [stateName] = (await readdir(join(root, "states"))).filter((name) => name.endsWith(".json"));
+    const statePath = join(root, "states", stateName);
+    const priorState = JSON.parse(await readFile(statePath, "utf8"));
+    delete priorState.meteredProviderConsentGeneration;
+    await writeFile(statePath, `${JSON.stringify(priorState)}\n`, { mode: 0o600 });
+
+    const blocked = await runTurn({
+      config,
+      messages: [user("Do not bill this unconfirmed legacy Bot")],
+      sessionOptions: { botId: "pre-safety-paid-bot" },
+    }, { fetchImpl: async () => { requests += 1; throw new Error("legacy paid state escaped"); } });
+    assert.match(blocked.text, /predates the current safety controls/);
+    assert.match(blocked.text, /\/provider openrouter confirm-paid/);
+    assert.equal(requests, 0);
+
+    const warning = await runTurn({
+      config,
+      messages: [user("/provider openrouter")],
+      sessionOptions: { botId: "pre-safety-paid-bot" },
+    });
+    assert.match(warning.text, /metered API billing/);
+    const confirmed = await runTurn({
+      config,
+      messages: [user("/provider openrouter confirm-paid")],
+      sessionOptions: { botId: "pre-safety-paid-bot" },
+    });
+    assert.match(confirmed.text, /billing is confirmed/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1341,9 +1405,15 @@ test("a group-addressed control changes only the addressed Bot's state", async (
     auditPath: join(root, "audit.jsonl"),
   };
   try {
-    const switched = await runTurn({
+    const warning = await runTurn({
       config,
       messages: [user("@Research Bot /provider openrouter")],
+      sessionOptions: { botId: "research-bot", channelId: "group-falcon" },
+    });
+    assert.equal(warning.provider, "codex");
+    const switched = await runTurn({
+      config,
+      messages: [user("@Research Bot /provider openrouter confirm-paid")],
       sessionOptions: { botId: "research-bot", channelId: "group-falcon" },
     });
     const other = await runTurn({
@@ -1550,7 +1620,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter Doctor\n\nGROKROUTER_NATIVE_COMMAND: /doctor\n\n<user_query>doctor</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.47: OK/);
+    assert.match(nativeDoctor.text, /Router 0\.1\.0-beta\.48: OK/);
     assert.equal(nativeDoctor.control, true);
 
     const nativeProvider = await runTurn({
@@ -1558,7 +1628,7 @@ test("a brand-new Bot accepts the exact model workflow and forgiving screenshot 
       messages: [user("# GrokRouter provider control\n\nGROKROUTER_NATIVE_COMMAND: /provider\n\n<user_query>provider openrouter</user_query>")],
       sessionOptions: { botId: "native-workflow-bot" },
     }, { fetchImpl: neverInfer });
-    assert.match(nativeProvider.text, /Switched this bot from OpenRouter/);
+    assert.match(nativeProvider.text, /OpenRouter is already active/);
     assert.equal(nativeProvider.control, true);
 
     const pluralAlias = await runTurn({
@@ -1830,6 +1900,185 @@ test("a failed provider attempt releases its user-turn claim for retry", async (
   }
 });
 
+test("metered providers block sub-agents before any HTTP request", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-metered-subagent-"));
+  let requests = 0;
+  const config = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  try {
+    const blocked = await runTurn({
+      config,
+      messages: [user("Continue the assigned work")],
+      sessionOptions: {
+        botId: "paid-subagent-bot",
+        isSubagent: true,
+        lineage: { parentAgentToolCallId: "parent-call-1" },
+      },
+    }, { fetchImpl: async () => { requests += 1; throw new Error("paid sub-agent request escaped"); } });
+    assert.match(blocked.text, /Paid-provider safety stop/);
+    assert.equal(requests, 0);
+    const audit = (await readFile(config.auditPath, "utf8")).trim().split("\n").map(JSON.parse);
+    assert.equal(audit.some((entry) => entry.event === "provider_request_start"), false);
+    assert.equal(audit.some((entry) => entry.event === "turn_blocked"
+      && entry.reason === "metered-subagent-disabled"), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("metered providers reject unstable identity and oversized transcripts without HTTP", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-metered-preflight-"));
+  let requests = 0;
+  const config = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    meteredProviderMaxTranscriptMessages: 2,
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+  };
+  const neverFetch = async () => { requests += 1; throw new Error("metered preflight escaped"); };
+  try {
+    const unstable = await runTurn({
+      config,
+      messages: [user("No stable Bot identity")],
+      sessionOptions: {},
+    }, { fetchImpl: neverFetch });
+    assert.match(unstable.text, /stable Bot or conversation identity/);
+
+    const oversized = await runTurn({
+      config,
+      messages: [user("one"), { role: "assistant", content: "two" }, user("three")],
+      sessionOptions: { botId: "oversized-transcript-bot" },
+    }, { fetchImpl: neverFetch });
+    assert.match(oversized.text, /transcript is too large/);
+    assert.equal(requests, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("metered providers enforce request bytes and per-Bot hourly quotas", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-metered-quota-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  const baseConfig = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+    meteredUsagePath: join(root, "metered-usage.json"),
+  };
+  const fetchImpl = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({
+      model: "openai/test-model",
+      choices: [{ message: { content: "METERED_OK", tool_calls: [] } }],
+      usage: { prompt_tokens: 9, completion_tokens: 3 },
+    }), { status: 200 });
+  };
+  try {
+    const tooLarge = await runTurn({
+      config: { ...baseConfig, meteredProviderMaxRequestBytes: 1 },
+      messages: [user("This serialized request is larger than one byte")],
+      sessionOptions: { botId: "byte-limit-bot" },
+    }, { fetchImpl });
+    assert.match(tooLarge.text, /request is too large/);
+    assert.equal(requests, 0);
+
+    const corruptMeterPath = join(root, "corrupt-metered-usage.json");
+    await writeFile(corruptMeterPath, "{not-json\n", { mode: 0o600 });
+    const corruptMeter = await runTurn({
+      config: { ...baseConfig, meteredUsagePath: corruptMeterPath },
+      messages: [user("Never reset a corrupt paid-request meter")],
+      sessionOptions: { botId: "corrupt-meter-bot" },
+    }, { fetchImpl });
+    assert.match(corruptMeter.text, /meter could not be read or updated safely/);
+    assert.equal(requests, 0);
+
+    const quotaConfig = { ...baseConfig, meteredProviderMaxRequestsPerBotHour: 1 };
+    const first = await runTurn({
+      config: quotaConfig,
+      messages: [user("first paid request")],
+      sessionOptions: { botId: "quota-bot" },
+    }, { fetchImpl });
+    assert.equal(first.text, "METERED_OK");
+    const blocked = await runTurn({
+      config: quotaConfig,
+      messages: [user("second paid request")],
+      sessionOptions: { botId: "quota-bot" },
+    }, { fetchImpl });
+    assert.match(blocked.text, /hourly metered-provider request limit/);
+    assert.equal(requests, 1);
+
+    const audit = (await readFile(baseConfig.auditPath, "utf8")).trim().split("\n").map(JSON.parse);
+    const success = audit.find((entry) => entry.event === "turn_ok" && entry.providerRequestCount === 1);
+    assert.deepEqual(success.usage, {
+      inputTokens: 9,
+      outputTokens: 3,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+    assert.equal(success.providerRequestBytes > 0, true);
+    assert.equal(audit.some((entry) => entry.event === "turn_blocked"
+      && entry.reason === "metered-bot-hour-limit"), true);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("metered providers enforce a router-wide hourly quota across Bots", async () => {
+  const root = await mkdtemp(join(tmpdir(), "grokbot-router-metered-router-quota-"));
+  const previous = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = TEST_OPENROUTER_KEY;
+  let requests = 0;
+  const config = {
+    provider: "openrouter",
+    providers: ["openrouter"],
+    openRouterModel: "openai/test-model",
+    statePath: join(root, "states.json"),
+    auditPath: join(root, "audit.jsonl"),
+    meteredUsagePath: join(root, "metered-usage.json"),
+    meteredProviderMaxRequestsRouterHour: 1,
+  };
+  const fetchImpl = async () => {
+    requests += 1;
+    return new Response(JSON.stringify({
+      model: "openai/test-model",
+      choices: [{ message: { content: "ROUTER_QUOTA_OK", tool_calls: [] } }],
+      usage: {},
+    }), { status: 200 });
+  };
+  try {
+    const first = await runTurn({
+      config,
+      messages: [user("Bot one request")],
+      sessionOptions: { botId: "router-quota-one" },
+    }, { fetchImpl });
+    assert.equal(first.text, "ROUTER_QUOTA_OK");
+    const blocked = await runTurn({
+      config,
+      messages: [user("Bot two request")],
+      sessionOptions: { botId: "router-quota-two" },
+    }, { fetchImpl });
+    assert.match(blocked.text, /router-wide hourly/);
+    assert.equal(requests, 1);
+  } finally {
+    if (previous === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previous;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("a finished subagent revives a turn whose launch message was already delivered", async () => {
   const root = await mkdtemp(join(tmpdir(), "grokbot-router-subagent-revival-"));
   const previous = process.env.OPENROUTER_API_KEY;
@@ -1839,6 +2088,7 @@ test("a finished subagent revives a turn whose launch message was already delive
     provider: "openrouter",
     providers: ["openrouter"],
     openRouterModel: "openai/test-model",
+    meteredProviderAllowSubagents: true,
     statePath: join(root, "states.json"),
   };
   const query = user("Delegate this and report the result");
@@ -1959,6 +2209,7 @@ test("concurrent replays of one automation completion claim provider inference e
     provider: "openrouter",
     providers: ["openrouter"],
     openRouterModel: "openai/test-model",
+    meteredProviderAllowSubagents: true,
     statePath: join(root, "states.json"),
   };
   const messages = [
@@ -2133,6 +2384,7 @@ test("empty OpenRouter child revival retries once and then delivers the tagged r
         provider: "openrouter",
         providers: ["openrouter"],
         openRouterModel: "openai/test-model",
+        meteredProviderAllowSubagents: true,
         statePath: join(root, "states.json"),
         auditPath: join(root, "audit.jsonl"),
       },

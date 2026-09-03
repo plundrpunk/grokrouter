@@ -1,9 +1,10 @@
 # Verification matrix
 
-Research/build lock: 2026-09-02. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.47.
+Research/build lock: 2026-09-03. Grok Bot: 0.30.0. Router candidate: 0.1.0-beta.48.
 
 | Claim | Automated evidence | Live evidence | Status |
 | --- | --- | --- | --- |
+| Metered-provider spend containment | Zero-HTTP tests cover paid sub-agent, unstable identity, transcript, request-byte, per-Bot, and router-wide blocks; successful mock turns record request quota and normalized usage | Beta.47 audit exposed 663 direct OpenAI turn starts, including one 477-turn autonomous sub-agent/tool loop. Owner revoked keys; beta.48 is not installed live | Beta.48 automated pass; live install and zero-request safety receipt pending |
 | Direct OpenAI text and native function calls | Mock HTTP contract pins `https://api.openai.com/v1/chat/completions`, Bearer auth, model/reasoning fields, structured tools, and key redaction | Not run for beta.47 | Automated pass; live pending |
 | Official-provider endpoint and secret-path pinning | Runtime rejects custom OpenAI/OpenRouter endpoints and secret paths; synthetic reinstall discards hostile inherited config | Not run for beta.47 | Automated pass; live pending |
 | llama.cpp compatibility boundary | Mock contract accepts only unauthenticated loopback OpenAI-compatible endpoints and preserves function calls | Not run for beta.47 | Automated pass; live pending |

@@ -26,8 +26,9 @@ In the same first Bot, prove each enabled provider with reversible, non-sensitiv
 - Create a small proof file with Grok's outer `Shell`, read it with outer `Read`, and verify the exact contents.
 - Request a screenshot and identify one visible, non-sensitive window.
 - Discover and run one small dynamic sub-agent task. Wait for the finished child's result to appear in the parent chat. A launch acknowledgement or `CheckSubagent` status alone is not a pass.
-- For OpenRouter, inspect the first request/audit receipt: an explicit delegation request must force a supplied dedicated orchestration tool or `GetDynamicTools`. If the host supplied zero actionable schemas, the visible answer must state that limitation and must not claim a child started.
+- Run the sub-agent proof only on Codex SDK or a deliberately reviewed local provider. On OpenAI/OpenRouter defaults, the same request must return a paid-provider safety stop, emit `turn_blocked: metered-subagent-disabled`, and emit no `provider_request_start` receipt.
 - For direct OpenAI, confirm the audit names `openai`, the selected model, and no OpenRouter-only request headers or fields.
+- For each metered provider, prove that a second switch command with `confirm-paid` is required; then verify a normal request emits one `provider_request_start` and a `turn_ok` receipt containing normalized usage and request byte/count fields.
 - For llama.cpp, confirm the server is inside the Bot computer, the configured URL is loopback, no Authorization header is sent, and the selected model/template supports the exact tool call being tested.
 - After the child result appears, wait through the next host continuation and confirm the result is not inferred or delivered a second time.
 - Inspect the redacted audit log and confirm the exact provider/model and expected tool names.

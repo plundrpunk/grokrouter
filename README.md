@@ -20,6 +20,9 @@
 > [!IMPORTANT]
 > GrokRouter is an experimental, unofficial, reversible project for **Grok Bot 0.30.0 only**. If GrokRouter reports an unsupported or changed version, stop. Never force it past that check.
 
+> [!CAUTION]
+> **OpenAI and OpenRouter are direct, metered APIs. ChatGPT Plus/Pro and Codex subscriptions do not pay their API charges.** Codex SDK uses Codex account authentication. GrokRouter requires explicit confirmation before selecting a metered provider, blocks paid sub-agents by default, and caps paid request size, output, and volume. Provider-side project budgets remain the authoritative dollar limit.
+
 ## What does it do?
 
 You keep using the normal Grok Bot app. GrokRouter lets an individual Bot use Codex SDK, OpenAI directly, or a model from OpenRouter as its AI brain. A loopback-only llama.cpp adapter is also available for development inside the Bot computer.
@@ -96,8 +99,8 @@ Pick the row that matches what you have:
 | What you have | What to select |
 | --- | --- |
 | A Codex account | Keep **Codex SDK** checked and select it as the default. |
-| An OpenAI API key | Keep **OpenAI** checked, paste the complete `sk-...` key, and select **OpenAI** as the default. |
-| An OpenRouter key | Keep **OpenRouter** checked, paste the complete `sk-or-v1-...` key, and select **OpenRouter** as the default. |
+| An OpenAI API key | Keep **OpenAI (metered API)** checked, paste the complete `sk-...` key, select it as the default, and accept the separate-billing warning. |
+| An OpenRouter key | Keep **OpenRouter (metered API)** checked, paste the complete `sk-or-v1-...` key, select it as the default, and accept the separate-billing warning. |
 | More than one | Keep those providers checked, enter their keys, and choose the default for new Bots. |
 
 Click **Install Router** and wait. Do not close Grok Bot or GrokRouter.
@@ -105,6 +108,7 @@ Click **Install Router** and wait. Do not close Grok Bot or GrokRouter.
 - If GrokRouter asks for a Bot computer, return to Grok Bot, select any Bot, and click **Open computer**.
 - If you selected Codex, click **Start Codex Sign-in** after installation and complete the sign-in shown in the Bot terminal.
 - OpenAI and OpenRouter keys are sent directly to Grok Bot's protected Secrets store and cleared from the installer fields.
+- Before using a metered default, set a hard project budget/limit in that provider's own dashboard. GrokRouter's local counters are a second safety layer, not a billing guarantee.
 
 The installer has finished when its log shows a line beginning with `✓ Installed`.
 
@@ -150,7 +154,7 @@ From now on, stay inside Grok Bot. You do not need to keep GrokRouter open.
 | OpenAI reports a credential problem | Paste the complete project key beginning with `sk-`, without spaces before or after it. |
 | OpenRouter reports a credential problem | Paste the complete key beginning with `sk-or-v1-`, without spaces before or after it. |
 | Step 5 says this Bot computer's host did not pass the stock-host checks | The host is not on the exact signed SHA-256-and-byte-count list. Nothing was patched and no backup was created from that unknown file. Copy safe diagnostics so the host can be reviewed and added to a signed registry update. |
-| The version says beta.47, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
+| The version says beta.48, but Doctor says `stock-or-unknown`, `no router marker`, or that the host adapter is not patched | The runtime and live host adapter are separate. **Do not update or install from inside Grok Bot.** Follow [the adapter-mismatch repair](#the-version-is-correct-but-the-host-adapter-is-not-patched). |
 | Grok Bot answers a router command conversationally, opens its terminal, or offers to install/repair GrokRouter itself | Stop that attempt. The router did not intercept the command. Use the GrokRouter desktop app on the Mac to run Doctor and Repair Router. |
 | GrokRouter was working and then stopped | Open GrokRouter, click **Run Doctor**, then **Repair Router**. If you want to undo everything, click **Restore Stock Grok Bot**. |
 
@@ -163,7 +167,7 @@ GrokRouter has two pieces that must agree:
 1. **Runtime files** contain the provider code and display the GrokRouter version.
 2. **The active host adapter** makes Grok Bot intercept commands such as `/provider` before an ordinary model sees them.
 
-Seeing `0.1.0-beta.47` proves only the first piece. If Doctor reports `stock-or-unknown`, `no router marker`, or `host adapter is not patched`, the runtime exists but the Grok host currently running is stock or was replaced. This is an adapter mismatch—not permission to patch an unknown host.
+Seeing `0.1.0-beta.48` proves only the first piece. If Doctor reports `stock-or-unknown`, `no router marker`, or `host adapter is not patched`, the runtime exists but the Grok host currently running is stock or was replaced. This is an adapter mismatch—not permission to patch an unknown host.
 
 Repair it in this exact order:
 
@@ -175,7 +179,7 @@ Repair it in this exact order:
 6. After GrokRouter finishes, fully quit and reopen Grok Bot. Create a genuinely new Bot.
 7. Manually type `/router doctor`, then `/provider`, into the new Bot's normal message box.
 
-The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.47: OK` and `/provider` immediately names the selected provider and model. If Grok replies in normal prose, opens a terminal, or offers to repair anything, interception still failed; return to the Mac GrokRouter app and copy **safe diagnostics**.
+The repair passes only when `/router doctor` begins with `Router 0.1.0-beta.48: OK` and `/provider` immediately names the selected provider and model. If Grok replies in normal prose, opens a terminal, or offers to repair anything, interception still failed; return to the Mac GrokRouter app and copy **safe diagnostics**.
 
 ### A new stock host variant is not an endless reinstall
 
@@ -208,7 +212,7 @@ After a repair or reinstall, fully quit and reopen Grok Bot only after GrokRoute
 /models
 ```
 
-The setup passes when Doctor begins with `Router 0.1.0-beta.47: OK`, `/provider` names the selected provider and model, `/models` returns the packaged list, and a normal message receives one normal response.
+The setup passes when Doctor begins with `Router 0.1.0-beta.48: OK`, `/provider` names the selected provider and model, `/models` returns the packaged list, and a normal message receives one normal response.
 
 ## Everyday commands
 
@@ -281,12 +285,12 @@ TROUBLESHOOTING LOOP
    provider/model receipt, reaches ordinary model inference, or is ignored.
    If Grok replies conversationally, opens its terminal, or offers to repair or
    install anything, stop that attempt: the live host adapter did not intercept
-   the command. A displayed beta.47 runtime version does not override this test.
-3. If the runtime says beta.47 but Doctor reports stock-or-unknown, no router
+   the command. A displayed beta.48 runtime version does not override this test.
+3. If the runtime says beta.48 but Doctor reports stock-or-unknown, no router
    marker, or an unpatched host adapter, use the Mac GrokRouter app's Run Doctor
    and Repair Router actions. Do not ask Grok Bot to repair itself.
 4. If the current install is stale or otherwise unhealthy, use the verified
-   local beta.47 source checkout described in README.md. Open Grok Bot, select any Bot, open
+   local beta.48 source checkout described in README.md. Open Grok Bot, select any Bot, open
    its computer, run GrokRouter's Install Router action, and respond to any
    Action needed state. Wait for the authoritative installed receipt and the
    message verifying six unique GrokRouter commands.
@@ -310,7 +314,7 @@ TROUBLESHOOTING LOOP
    or a genuine external blocker remains.
 
 ACCEPTANCE CHECKS
-- /router doctor begins with: Router 0.1.0-beta.47: OK
+- /router doctor begins with: Router 0.1.0-beta.48: OK
 - /provider names the provider and model selected in GrokRouter.
 - /models returns the packaged model list.
 - A normal exact-text request returns exactly one settled answer.
@@ -434,8 +438,10 @@ Type these into Grok Bot's normal composer. The installer publishes user-invocab
 | --- | --- |
 | `/provider` | Show this Bot's provider and model |
 | `/provider codex` | Switch this Bot to the Codex SDK |
-| `/provider openai` | Switch this Bot to the direct OpenAI adapter |
-| `/provider openrouter` | Switch this Bot to OpenRouter |
+| `/provider openai` | Show the direct OpenAI metered-billing warning; does not switch yet |
+| `/provider openai confirm-paid` | Within five minutes, accept direct OpenAI API billing and switch this Bot |
+| `/provider openrouter` | Show the OpenRouter metered-billing warning; does not switch yet |
+| `/provider openrouter confirm-paid` | Within five minutes, accept OpenRouter API billing and switch this Bot |
 | `/provider llamacpp` | Switch to an enabled loopback llama.cpp server |
 | `/models` | Show the configured model catalog |
 | `/model sol` | Select the Codex `gpt-5.6-sol` alias |
@@ -506,6 +512,9 @@ grokbot-router uninstall
 - **Local installer bridge:** Electron diagnostics bind to `127.0.0.1` and are closed after every operation.
 - **No broad OS permissions:** the installers do not request Accessibility, Screen Recording, or Full Disk Access.
 - **Protected secrets:** OpenAI and OpenRouter keys go directly to Grok Bot Secrets and are excluded from repository files, provider state, release artifacts, and audit logs.
+- **Paid-provider circuit breakers:** direct OpenAI/OpenRouter turns require a stable Bot identity, allow at most 80 transcript messages, 128 KiB request bodies, 2,048 output tokens, 5 requests per Bot/hour, 20 per Bot/day, 10 across the router/hour, and 30 across the router/day. Paid sub-agents and background continuations are blocked by default.
+- **Upgrade quarantine:** a Bot whose paid-provider selection predates these controls cannot make another metered request until the user repeats that provider's two-step `confirm-paid` flow.
+- **Billing boundary:** local limits are defense in depth. Provider-side project budgets and usage/cost dashboards remain the authoritative dollar control and accounting record.
 - **Bounded tools:** only schemas offered by Grok for the current turn can cross the tool bridge.
 - **Honest evidence:** code-level capability, live verification, and blocked claims are recorded separately.
 
@@ -541,9 +550,9 @@ Coding agents must begin with [AGENTS.md](AGENTS.md). It defines the authoritati
 
 ## Release truth
 
-Beta.47 adds direct OpenAI support, a reusable OpenAI-compatible provider layer, a loopback-only llama.cpp development adapter, exact app identity checks, random installer diagnostic ports with process ownership verification, fixed official provider endpoints, fixed protected-secret paths, and exact-host-only mutation. Unknown hosts remain untouched even when their source shape looks compatible.
+Beta.48 adds fail-closed paid-provider confirmation and circuit breakers after beta.47 direct-provider traffic exposed an unsafe autonomous-loop failure mode. It retains direct OpenAI support, the reusable OpenAI-compatible layer, loopback-only llama.cpp development adapter, exact app identity checks, random installer diagnostic ports with process ownership verification, fixed official provider endpoints, fixed protected-secret paths, and exact-host-only mutation.
 
-The beta.47 automated provider, patch, installer, and Windows contracts pass locally. It has not yet completed the live install → restore → reinstall → fresh-Bot gate, so direct OpenAI, llama.cpp, and the new installer security controls are not claimed live-verified. The last live lifecycle evidence remains the earlier beta.46 result recorded in the test matrix.
+The beta.48 automated provider, patch, installer, and Windows contracts pass locally. It has not yet completed the live install → restore → reinstall → fresh-Bot gate, so direct OpenAI, llama.cpp, and the new installer security controls are not claimed live-verified. The last live lifecycle evidence remains the earlier beta.47 result recorded in the test matrix.
 
 See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and the dated [Independent Review](docs/INDEPENDENT-REVIEW-2026-08-29.md) for the evidence behind every claim.
 
@@ -552,6 +561,7 @@ See [Release Notes](RELEASE_NOTES.md), [Test Matrix](docs/TEST-MATRIX.md), and t
 - [How it works, without the jargon](docs/HOW-IT-WORKS.md)
 - [Technical architecture](docs/ARCHITECTURE.md)
 - [Providers and extension contract](docs/PROVIDERS.md)
+- [2026-09-03 OpenAI spend incident](docs/INCIDENT-2026-09-03-OPENAI-SPEND.md)
 - [Fresh-Bot acceptance gate](docs/FRESH-BOT-ACCEPTANCE.md)
 - [Verification matrix](docs/TEST-MATRIX.md)
 - [Security and trust boundary](SECURITY.md)

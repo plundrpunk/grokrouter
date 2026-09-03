@@ -25,12 +25,13 @@
         </div>
         <div class="checks">
           <label><input id="codexEnabled" type="checkbox" checked /> <span>Codex SDK</span></label>
-          <label><input id="openAIEnabled" type="checkbox" checked /> <span>OpenAI</span></label>
-          <label><input id="openRouterEnabled" type="checkbox" checked /> <span>OpenRouter</span></label>
+          <label><input id="openAIEnabled" type="checkbox" checked /> <span>OpenAI (metered API)</span></label>
+          <label><input id="openRouterEnabled" type="checkbox" checked /> <span>OpenRouter (metered API)</span></label>
         </div>
+        <p class="billing-warning">Billing: Codex SDK uses Codex account authentication. OpenAI and OpenRouter use direct, metered API billing that is separate from ChatGPT/Codex subscriptions. Paid sub-agents are blocked and request volume is capped by default.</p>
         <div class="form-grid">
           <label for="defaultProvider">Default provider</label>
-          <select id="defaultProvider"><option value="codex">Codex SDK</option><option value="openai">OpenAI</option><option value="openrouter">OpenRouter</option></select>
+          <select id="defaultProvider"><option value="codex">Codex SDK</option><option value="openai">OpenAI (metered API)</option><option value="openrouter">OpenRouter (metered API)</option></select>
           <label for="codexModel">Codex model</label>
           <select id="codexModel"><option>gpt-5.6-sol</option><option>gpt-5.6-terra</option><option>gpt-5.6-luna</option></select>
           <label for="openAIModel">OpenAI model</label>

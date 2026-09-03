@@ -18,6 +18,12 @@ YouTube-ready files:
 5. **If an action is needed, Grok still does it.** The selected AI can request a computer, file, browser or orchestration tool only when Grok supplied that tool for the turn. Grok's permission layer still applies. The result goes back to the same selected AI, which finishes the answer.
 6. **Recovery is built in.** Installation verifies that the Grok host is genuinely stock, saves the untouched original, and can restore the stock inference path later.
 
+## The billing boundary
+
+Codex SDK authenticates with a Codex account and uses that account's subscription limits. OpenAI and OpenRouter keys call direct metered APIs; ChatGPT and Codex subscriptions do not cover those API requests. The installers require a separate warning confirmation before selecting a paid default, and chat switching requires a warning command followed by `confirm-paid`.
+
+Metered providers are intentionally restricted: paid sub-agents/background continuations are blocked by default, and stable identity, transcript, request-size, output-token, per-Bot, and router-wide limits are checked before every HTTP attempt. These local stops limit a runaway loop, but the provider's own project budget is still the authoritative dollar ceiling.
+
 ## What happens during installation
 
 The native macOS installer—and the source-preview Windows shell built around the same payload—is a guided delivery mechanism. It does not replace the Grok Bot app.
@@ -81,6 +87,8 @@ This is why the acceptance test always creates two new Bots: the first is switch
 ## Credentials and data boundaries
 
 - OpenAI and OpenRouter keys are saved through Grok Bot's protected Secrets store and loaded only when a request is made.
+- OpenAI and OpenRouter are metered APIs; Codex SDK uses Codex account authentication. They are not interchangeable billing paths.
+- A metered request receives a persistent quota reservation before HTTP starts. Successful audit receipts include normalized token usage and request size/count; the provider's cost dashboard remains authoritative for charges.
 - Provider credentials are not written to this repository, per-Bot state files or audit logs.
 - The chosen provider necessarily receives the conversation content and media needed to answer that routed turn.
 - Grok remains the executor for outer computer, file, browser and orchestration tools. A provider receives their results only when that tool path actually runs.
