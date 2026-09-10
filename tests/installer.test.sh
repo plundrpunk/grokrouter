@@ -387,6 +387,15 @@ config.update({
 with open(path, "w") as output:
     json.dump(config, output)
 PY
+mkdir -p "$TEST_RUNTIME/conversation-states/tool-links"
+printf '%s\n' '{"provider":"openrouter","model":"openai/gpt-5.6-luna"}' \
+  > "$TEST_RUNTIME/conversation-states/bot-one.json"
+printf '%s\n' '{"conversationKey":"bot-one","createdAt":123}' \
+  > "$TEST_RUNTIME/conversation-states/tool-links/call-one.json"
+printf '%s\n' '{"legacy":{"provider":"openrouter"}}' \
+  > "$TEST_RUNTIME/conversation-states.json"
+printf '%s\n' '{"event":"provider.selected","provider":"openrouter"}' \
+  > "$TEST_RUNTIME/audit.jsonl"
 ROUTER_PATCH_HOST="$TEST_HOST" \
 ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
 ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
@@ -400,8 +409,27 @@ bash "$PAYLOAD/remote/install.sh" \
 grep -q 'Reusing the already verified pinned Codex runtime' "$TEMPORARY/install-reuse.log"
 "$TEST_BIN/grokbot-router" status | grep -q 'Default provider: openrouter'
 "$TEST_BIN/grokbot-router" status | grep -q 'OpenRouter model: openai/gpt-5.6-luna'
+grep -q '"model":"openai/gpt-5.6-luna"' "$TEST_RUNTIME/conversation-states/bot-one.json"
+grep -q '"conversationKey":"bot-one"' "$TEST_RUNTIME/conversation-states/tool-links/call-one.json"
+grep -q '"legacy"' "$TEST_RUNTIME/conversation-states.json"
+grep -q '"event":"provider.selected"' "$TEST_RUNTIME/audit.jsonl"
+[[ "$(stat -f '%Lp' "$TEST_RUNTIME/conversation-states" 2>/dev/null || stat -c '%a' "$TEST_RUNTIME/conversation-states")" == "700" ]]
+[[ "$(stat -f '%Lp' "$TEST_RUNTIME/conversation-states/bot-one.json" 2>/dev/null || stat -c '%a' "$TEST_RUNTIME/conversation-states/bot-one.json")" == "600" ]]
 grep -q 'user-owned' "$TEST_GROK_SKILLS/reasoning/KEEP"
 [[ ! -e "$TEST_GROK_SKILLS/provider" && ! -L "$TEST_GROK_SKILLS/provider" ]]
+ln -s "$TEST_RUNTIME/provider.json" "$TEST_RUNTIME/conversation-states/unsafe-link"
+UNSAFE_STATE_FAILURE="$(ROUTER_PATCH_HOST="$TEST_HOST" \
+ROUTER_PATCH_BACKUP="$TEST_BACKUP" \
+ROUTER_PATCH_MANIFEST="$TEST_MANIFEST" \
+ROUTER_BIN_DIR="$TEST_BIN" \
+ROUTER_GROK_SKILLS_ROOT="$TEST_GROK_SKILLS" \
+bash "$PAYLOAD/remote/install.sh" \
+  --install-root "$TEST_RUNTIME" \
+  --providers codex,openrouter \
+  --no-restart 2>&1 || true)"
+grep -q 'refusing to preserve non-regular runtime state' <<<"$UNSAFE_STATE_FAILURE"
+grep -q '"model":"openai/gpt-5.6-luna"' "$TEST_RUNTIME/conversation-states/bot-one.json"
+rm "$TEST_RUNTIME/conversation-states/unsafe-link"
 python3 "$TEST_RUNTIME/patch/router_patch.py" \
   --restore \
   --host "$TEST_HOST" \

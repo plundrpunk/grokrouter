@@ -310,6 +310,54 @@ path.write_text(json.dumps(config, indent=2) + "\n")
 path.chmod(0o600)
 PY
 
+# Runtime state belongs to the Bot, not to a particular router build. Carry it
+# into the staged tree before the atomic swap so repairs and upgrades do not
+# reset per-conversation provider/model choices or discard the audit trail.
+# Refuse links and special files rather than copying attacker-controlled paths.
+ROUTER_PREVIOUS_ROOT="$INSTALL_ROOT" \
+ROUTER_STAGED_ROOT="$STAGE_ROOT" \
+python3 - <<'PY'
+import os
+import shutil
+import stat
+from pathlib import Path
+
+source_root = Path(os.environ["ROUTER_PREVIOUS_ROOT"])
+target_root = Path(os.environ["ROUTER_STAGED_ROOT"])
+
+def copy_regular(source: Path, target: Path) -> None:
+    details = source.lstat()
+    if not stat.S_ISREG(details.st_mode):
+        raise SystemExit(f"refusing to preserve non-regular runtime state: {source}")
+    shutil.copyfile(source, target)
+    target.chmod(0o600)
+
+state_root = source_root / "conversation-states"
+if state_root.exists() or state_root.is_symlink():
+    details = state_root.lstat()
+    if not stat.S_ISDIR(details.st_mode):
+        raise SystemExit(f"refusing to preserve unsafe runtime state directory: {state_root}")
+    staged_state_root = target_root / "conversation-states"
+    staged_state_root.mkdir(mode=0o700)
+    for current_root, directories, files in os.walk(state_root, followlinks=False):
+        current = Path(current_root)
+        relative = current.relative_to(state_root)
+        destination = staged_state_root / relative
+        destination.chmod(0o700)
+        for directory in directories:
+            child = current / directory
+            if not stat.S_ISDIR(child.lstat().st_mode):
+                raise SystemExit(f"refusing to preserve linked runtime state directory: {child}")
+            (destination / directory).mkdir(mode=0o700)
+        for filename in files:
+            copy_regular(current / filename, destination / filename)
+
+for filename in ("conversation-states.json", "audit.jsonl"):
+    source = source_root / filename
+    if source.exists() or source.is_symlink():
+        copy_regular(source, target_root / filename)
+PY
+
 DEFAULT_PROVIDER="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["provider"])' "$STAGE_ROOT/provider.json")"
 ENABLED_PROVIDERS="$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1]))["providers"]))' "$STAGE_ROOT/provider.json")"
 CODEX_MODEL="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["codexModel"])' "$STAGE_ROOT/provider.json")"
