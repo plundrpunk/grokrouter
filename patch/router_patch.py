@@ -31,12 +31,14 @@ LEGACY_BACKUPS = (
     Path("/home/box/sand-host/host-main.cjs.grok-sdk-adapter.prepatch"),
 )
 DEFAULT_MANIFEST = Path(__file__).with_name("manifests") / "0.30.0.json"
-# Another public router also rewrites the same host. Its marker must never be
-# mistaken for a stock host, so structural verification refuses it outright.
-FOREIGN_MARKER = re.compile(r"opengrok|open_grok", re.IGNORECASE)
+# Another public router also rewrites the same host. Detect the symbols its
+# host patch actually injects instead of its product name: current stock Grok
+# Bot bundles official protobuf types such as OpenGrokBotUserComputerRequest.
+# The exact-hash allowlist remains the only authority for a host write.
+FOREIGN_MARKER = re.compile(
+    r"resolvedTopLevelMaxMode|resolvedTopLevelParameters|applyProviderReasoningControls"
+)
 TRUST_EXACT = "exact-allowlist"
-TRUST_ANCHOR = "anchor-verified"
-TRUST_CACHE_SUFFIX = ".grokrouter-trust.json"
 
 
 EXECUTOR_CODE = r'''
@@ -100,7 +102,7 @@ function getGrokBotRouterChildEnv() {
     "PATH", "HOME", "USER", "LOGNAME", "SHELL", "LANG", "LC_ALL", "TERM",
     "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "CODEX_HOME",
     "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-    "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "OPENROUTER_API_KEY"
+    "SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "OPENAI_API_KEY", "OPENROUTER_API_KEY"
   ];
   return Object.fromEntries(names.flatMap((name) => (
     typeof process.env[name] === "string" ? [[name, process.env[name]]] : []
@@ -115,7 +117,7 @@ function appendGrokBotRouterHostError(config, error) {
     const auditPath = config?.auditPath || "/home/box/sand-data/grokbot-router/audit.jsonl";
     require("node:fs").appendFileSync(auditPath, `${JSON.stringify({
       timestamp: new Date().toISOString(),
-      version: "0.1.0-beta.46",
+      version: "0.1.0-beta.47",
       event: "host_bridge_error",
       diagnostic
     })}\n`, { encoding: "utf8", mode: 0o600 });
@@ -267,10 +269,16 @@ SESSION_CODE = r'''
       // GROKBOT_MODEL_ROUTER_V45: route enabled sessions through the provider adapter.
       const grokBotRouterConfig = loadGrokBotRouterConfig();
       if (grokBotRouterConfig) {
-        const provider = grokBotRouterConfig.provider === "openrouter" ? "openrouter" : "codex";
+        const provider = ["codex", "openai", "openrouter", "llamacpp"].includes(grokBotRouterConfig.provider)
+          ? grokBotRouterConfig.provider
+          : "codex";
         const modelId = provider === "openrouter"
           ? grokBotRouterConfig.openRouterModel || "anthropic/claude-sonnet-4.6"
-          : grokBotRouterConfig.codexModel || "gpt-5.6-sol";
+          : provider === "openai"
+            ? grokBotRouterConfig.openAIModel || "gpt-5.6-sol"
+            : provider === "llamacpp"
+              ? grokBotRouterConfig.llamaCppModel || "local"
+              : grokBotRouterConfig.codexModel || "gpt-5.6-sol";
         return {
           getExecutor: () => createGrokBotRouterPromptExecutor(grokBotRouterConfig, sessionOptions),
           getModelId: () => modelId
@@ -313,13 +321,11 @@ def validate_stock_hosts(value: Any, label: str) -> list[dict[str, Any]]:
 
 
 def validate_anchor_policy(value: Any) -> dict[str, Any]:
-    """Normalize the manifest policy for structurally verified stock hosts.
+    """Normalize the diagnostic-only structural inspection policy.
 
-    Absent or disabled means the historical behavior: only an exact SHA-256 and
-    byte-count pair is accepted. Enabled means a host that carries no router
-    marker, matches every source anchor exactly once, survives a read-only
-    patch plus ``node --check``, and falls inside the byte-count band is also
-    accepted as stock and backed up before it is patched.
+    Structural checks are useful compatibility evidence, but they never grant
+    mutation, backup, restore, repair, or watchdog authority. Only an exact
+    SHA-256 and byte-count pair from the bundled or signed registry does that.
     """
     if value is None:
         return {"enabled": False, "minBytes": 0, "maxBytes": 0}
@@ -402,42 +408,22 @@ def dry_run_patch(source: str, manifest: dict[str, Any]) -> None:
         temporary_path.unlink(missing_ok=True)
 
 
-def _trust_cache_path(path: Path) -> Path:
-    return path.with_name(f"{path.name}{TRUST_CACHE_SUFFIX}")
-
-
 def anchor_verification(
     path: Path,
     manifest: dict[str, Any],
     digest: str | None = None,
 ) -> dict[str, Any]:
-    """Structurally verify that ``path`` is an unmodified stock host.
+    """Inspect whether ``path`` is structurally compatible with the patch.
 
-    Returns ``{"ok", "reason", "patchDryRun"}``. The verdict is cached beside
-    the file, keyed by its SHA-256, byte count, router marker version, and the
-    manifest policy, because the lifecycle watchdog re-checks the backup every
-    few seconds and the read-only patch of a 25 MB host is not free.
+    Returns ``{"ok", "reason", "patchDryRun"}``. A positive result is
+    diagnostic evidence only and never authorizes a write to Grok's host or a
+    trusted stock backup. Unknown host inspection creates no adjacent cache.
     """
     policy = manifest.get("anchorVerifiedHosts") or validate_anchor_policy(None)
     if not path.exists():
         return {"ok": False, "reason": "host file is missing", "patchDryRun": "not-applicable"}
     digest = digest or sha256(path)
     byte_count = path.stat().st_size
-    cache_key = {
-        "sha256": digest,
-        "bytes": byte_count,
-        "marker": MARKER,
-        "anchors": list(manifest.get("requiredAnchors", [])),
-        "policy": policy,
-    }
-    cache_path = _trust_cache_path(path)
-    try:
-        cached = json.loads(cache_path.read_text())
-        if cached.get("key") == cache_key and isinstance(cached.get("result"), dict):
-            return cached["result"]
-    except Exception:
-        pass
-
     source = path.read_text(errors="replace")
     result: dict[str, Any] = {"ok": False, "reason": "", "patchDryRun": "not-applicable"}
     if MARKER in source or LEGACY_MARKER.search(source):
@@ -461,11 +447,6 @@ def anchor_verification(
             else:
                 result["ok"] = True
                 result["reason"] = "ok"
-    try:
-        cache_path.write_text(json.dumps({"key": cache_key, "result": result}, sort_keys=True) + "\n")
-        os.chmod(cache_path, 0o600)
-    except Exception:
-        pass
     return result
 
 
@@ -479,8 +460,6 @@ def host_trust(
         return None
     if is_allowed_stock(path, manifest, registry):
         return TRUST_EXACT
-    if anchor_verification(path, manifest)["ok"]:
-        return TRUST_ANCHOR
     return None
 
 
@@ -511,16 +490,14 @@ def inspect_host(
     verification = anchor_verification(host, manifest, digest)
     if is_allowed_stock(host, manifest, registry):
         trust: str | None = TRUST_EXACT
-    elif verification["ok"]:
-        trust = TRUST_ANCHOR
     else:
         trust = None
     if MARKER in source:
         status = "patched"
     elif trust == TRUST_EXACT:
         status = "known-stock"
-    elif trust == TRUST_ANCHOR:
-        status = "anchor-verified-stock"
+    elif verification["ok"]:
+        status = "structurally-compatible-untrusted"
     else:
         status = "unknown-stock-candidate"
     return {
@@ -530,7 +507,12 @@ def inspect_host(
         "hostSha256": digest,
         "hostBytes": byte_count,
         "hostTrust": trust,
-        "trustReason": verification["reason"] if trust is None else "ok",
+        "trustReason": (
+            "structural checks passed but exact signed hash and byte count are required"
+            if trust is None and verification["ok"]
+            else verification["reason"] if trust is None
+            else "ok"
+        ),
         "cloudArchitecture": platform.machine(),
         "anchorCounts": anchors,
         "patchDryRun": verification["patchDryRun"],
@@ -645,14 +627,13 @@ def verified_stock_source(
     host: Path,
     backup: Path,
     manifest: dict[str, Any],
-    allow_unknown: bool,
     registry: dict[str, Any] | None = None,
 ) -> Path:
     if host.exists() and MARKER not in host.read_text(errors="replace") and not LEGACY_MARKER.search(host.read_text(errors="replace")):
-        if allow_unknown or is_trusted_stock(host, manifest, registry):
+        if is_trusted_stock(host, manifest, registry):
             return host
     for candidate in (backup, *LEGACY_BACKUPS):
-        if candidate.exists() and (allow_unknown or is_trusted_stock(candidate, manifest, registry)):
+        if candidate.exists() and is_trusted_stock(candidate, manifest, registry):
             return candidate
     reason = anchor_verification(host, manifest)["reason"] if host.exists() else "host file is missing"
     raise PatchError(
@@ -668,26 +649,30 @@ def install(
     backup: Path,
     manifest: dict[str, Any],
     dry_run: bool,
-    allow_unknown: bool,
     registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not host.exists():
         raise PatchError(f"Host not found: {host}")
     current = host.read_text()
-    if MARKER in current:
-        return {
-            "ok": True,
-            "status": "already-installed",
-            "host": str(host),
-            "hostSha256": sha256(host),
-        }
-    stock = verified_stock_source(host, backup, manifest, allow_unknown, registry)
-    trust = host_trust(stock, manifest, registry) or ("development-override" if allow_unknown else None)
+    stock = verified_stock_source(host, backup, manifest, registry)
+    trust = host_trust(stock, manifest, registry)
     source = stock.read_text()
     validate_anchors(source, manifest)
     patched = patch_text(source)
     if MARKER not in patched:
         raise PatchError("Patched host is missing the router marker")
+    if current == patched:
+        if not dry_run and stock != backup:
+            backup.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(stock, backup)
+        return {
+            "ok": True,
+            "status": "already-installed",
+            "host": str(host),
+            "hostSha256": sha256(host),
+            "stockBackup": str(backup if backup.exists() else stock),
+            "stockTrust": trust,
+        }
     if dry_run:
         return {
             "ok": True,
@@ -705,7 +690,6 @@ def install(
     backup.parent.mkdir(parents=True, exist_ok=True)
     if stock != backup and (not backup.exists() or sha256(backup) != sha256(stock)):
         shutil.copy2(stock, backup)
-        _trust_cache_path(backup).unlink(missing_ok=True)
     previous = timestamp_backup(host, "before-install")
     temporary = host.with_name(f"{host.name}.grokbot-router.tmp.cjs")
     temporary.write_text(patched)
@@ -728,18 +712,17 @@ def restore(
     backup: Path,
     manifest: dict[str, Any],
     dry_run: bool,
-    allow_unknown: bool,
     registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not backup.exists():
         for legacy in LEGACY_BACKUPS:
-            if legacy.exists() and (allow_unknown or is_trusted_stock(legacy, manifest, registry)):
+            if legacy.exists() and is_trusted_stock(legacy, manifest, registry):
                 backup.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(legacy, backup)
                 break
     if not backup.exists():
         raise PatchError(f"Verified stock backup not found: {backup}")
-    if not allow_unknown and not is_trusted_stock(backup, manifest, registry):
+    if not is_trusted_stock(backup, manifest, registry):
         raise PatchError(
             f"Stock backup did not pass the stock-host checks: {sha256(backup)} "
             f"({anchor_verification(backup, manifest)['reason']})"
@@ -764,22 +747,31 @@ def doctor(
     host: Path,
     backup: Path,
     manifest: dict[str, Any],
-    allow_unknown: bool = False,
     registry: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     host_exists = host.exists()
     backup_exists = backup.exists()
     host_text = host.read_text(errors="replace") if host_exists else ""
     backup_trust = host_trust(backup, manifest, registry) if backup_exists else None
+    host_patch_verified = False
+    if host_exists and backup_trust is not None:
+        try:
+            stock_source = backup.read_text()
+            validate_anchors(stock_source, manifest)
+            host_patch_verified = host_text == patch_text(stock_source)
+        except Exception:
+            host_patch_verified = False
     return {
         "ok": bool(
             host_exists
             and MARKER in host_text
+            and host_patch_verified
             and backup_exists
-            and (allow_unknown or backup_trust is not None)
+            and backup_trust is not None
         ),
         "status": "installed" if MARKER in host_text else "stock-or-unknown",
         "routerMarker": MARKER in host_text,
+        "hostPatchVerified": host_patch_verified,
         "legacyMarker": bool(LEGACY_MARKER.search(host_text)),
         "host": str(host),
         "hostSha256": sha256(host) if host_exists else None,
@@ -787,7 +779,6 @@ def doctor(
         "stockBackupSha256": sha256(backup) if backup_exists else None,
         "stockBackupVerified": backup_trust is not None,
         "stockBackupTrust": backup_trust,
-        "developmentOverride": allow_unknown,
         "supportedVersion": manifest.get("grokBotVersion"),
     }
 
@@ -804,7 +795,6 @@ def main() -> int:
     action.add_argument("--doctor", action="store_true", help="inspect installation health")
     action.add_argument("--inspect", action="store_true", help="print a non-secret host compatibility report")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--allow-unknown-host", action="store_true", help="development only")
     parser.add_argument("--host", type=Path, default=DEFAULT_HOST)
     parser.add_argument("--backup", type=Path, default=DEFAULT_BACKUP)
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST)
@@ -815,13 +805,13 @@ def main() -> int:
     manifest = load_manifest(args.manifest)
     registry = load_host_registry(args.host_registry, manifest) if args.host_registry else None
     if args.doctor:
-        result = doctor(args.host, args.backup, manifest, args.allow_unknown_host, registry)
+        result = doctor(args.host, args.backup, manifest, registry)
     elif args.inspect:
         result = inspect_host(args.host, manifest, registry)
     elif args.restore:
-        result = restore(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host, registry)
+        result = restore(args.host, args.backup, manifest, args.dry_run, registry)
     else:
-        result = install(args.host, args.backup, manifest, args.dry_run, args.allow_unknown_host, registry)
+        result = install(args.host, args.backup, manifest, args.dry_run, registry)
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))
     else:

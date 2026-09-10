@@ -11,7 +11,7 @@ This document is the implementation-level companion to [How it works, without th
 | Official Grok Bot | Chat UI, Bots, transcript, computer, files, browser, tool execution, permission UX and assistant delivery | Routed provider credentials or per-Bot provider selection |
 | Patched host executor | Decide stock versus routed path, sanitize the host payload, launch the router runtime and translate its result back into Grok's protocol | Provider implementation, long-term state or arbitrary tool execution |
 | Router runtime | Deterministic controls, stable Bot identity, provider/model state, replay protection, provider calls, transcript conversion and redacted audit | Grok's UI, permission decisions or the computer itself |
-| Codex SDK / OpenRouter | Model inference and provider-native thread state | Authority to invent a Grok tool that the host did not offer |
+| Codex SDK / OpenAI-compatible providers | Model inference and provider-native thread state | Authority to invent a Grok tool that the host did not offer |
 | Native platform installer shells | Swift/AppKit on macOS and sandboxed Electron on Windows: exact compatibility checks, loopback/noVNC transport, checksummed install, provider setup, restore and cleanup | Grok account data or an unknown host build |
 
 ## Install and update flow
@@ -40,7 +40,7 @@ The installer links only missing skill names or links already owned by the curre
 2. The small host adapter checks `provider.json`. If routing is disabled, the original inference path continues untouched.
 3. If enabled, the adapter launches the isolated Node runtime and sends sanitized JSON over stdin: config, transcript, tool schemas, and stable session identifiers.
 4. The runtime selects the provider stored for that Bot.
-5. Codex starts/resumes an SDK thread; OpenRouter sends a Chat Completions request with native function schemas.
+5. Codex starts/resumes an SDK thread; OpenAI, OpenRouter, or loopback llama.cpp receives a Chat Completions request with native function schemas.
 6. A normal text response is wrapped in Grok's user-delivery tool. A provider tool request is returned to Grok for execution.
 7. Grok executes computer/browser/file/orchestration tools in its existing host. Their results re-enter the transcript and the same provider thread continues.
 
@@ -68,9 +68,11 @@ Codex receives a JSON response schema with `text` and `toolCalls`. Grok's outer 
 
 Images are written to a private temporary directory and passed as Codex `local_image` inputs. At most four images and 20 MB per image are accepted per turn.
 
-## OpenRouter bridge
+## OpenAI-compatible bridge
 
-Grok messages are converted to OpenAI-compatible roles/content. Outer tools become native function definitions. Known camel-case and snake-case Grok wrappers are normalized, provider IDs are replaced with router-owned UUIDs, orphan results are dropped, and dangling calls receive a bounded synthetic result before the transcript is sent upstream. Visual tool results become a follow-up multimodal user message. The secret is loaded at request time and is not serialized into state or audit output.
+Grok messages are converted to OpenAI-compatible roles/content. Outer tools become native function definitions. Known camel-case and snake-case Grok wrappers are normalized, provider IDs are replaced with router-owned UUIDs, orphan results are dropped, and dangling calls receive a bounded synthetic result before the transcript is sent upstream. Visual tool results become a follow-up multimodal user message. OpenAI and OpenRouter secrets are loaded at request time and are not serialized into state or audit output; llama.cpp is unauthenticated and restricted to loopback.
+
+Each provider definition owns its endpoint and request differences. OpenAI is fixed to `https://api.openai.com/v1`; OpenRouter is fixed to `https://openrouter.ai/api/v1`; llama.cpp accepts only an unauthenticated loopback HTTP(S) base URL. Inherited custom official-provider URLs or secret paths are rejected, and the installer rebuilds effective configuration from packaged defaults plus a small allowlist.
 
 An explicit OpenRouter delegation request is provider-aware. If Grok offered a dedicated sub-agent tool, that tool is forced on the first round; otherwise an offered `GetDynamicTools` broker is forced so the model discovers the real orchestration schema before calling it. If Grok exposed no actionable schema, the provider is told that it cannot launch a real child and must not invent a launch or completion. This improves use of available orchestration without weakening the rule that the router cannot create tool authority the host did not supply.
 
@@ -92,7 +94,7 @@ The project never bundles Grok Bot's proprietary host source. `router_patch.py` 
 
 - `grokbot-router disable` leaves the installed adapter in place but sends new sessions down the stock path.
 - `grokbot-router enable` resumes routing.
-- `grokbot-router repair`, or **Repair** in GrokRouter, reapplies the adapter only when the live host passes the exact stock hash and anchor gates. It also reenables the lifecycle watchdog.
+- `grokbot-router repair`, or **Repair** in GrokRouter, reapplies the adapter only when the live host passes the exact signed stock hash-and-byte gate plus source-anchor checks. It also reenables the lifecycle watchdog.
 - `grokbot-router uninstall`, or **Restore stock** in GrokRouter, verifies the persistent stock backup, copies it over the routed host and emits the restore sentinel before a delayed restart.
 - GrokRouter closes its temporary loopback diagnostic session and reopens Grok Bot normally whether install or restore succeeds or fails.
 
@@ -105,7 +107,7 @@ The exact beta.38 artifact passed install, verified stock restore and post-resto
 - Grok remains the executor and permission boundary for outer tools. The provider receives tool results only after Grok executes an offered tool.
 - The child runtime receives an explicit environment allowlist instead of the full host environment.
 - Audit records use bounded event names, counts, provider/model receipts, suppression reasons and non-secret protocol identifiers. Recognizable key shapes and raw provider errors are redacted.
-- The diagnostic Electron endpoint binds to `127.0.0.1` and exists only during an installer operation.
+- The diagnostic Electron endpoint binds to a random `127.0.0.1` port, must be owned by the verified Grok Bot process, and exists only during an installer operation.
 
 See [SECURITY.md](../SECURITY.md) for the threat model and [TEST-MATRIX.md](TEST-MATRIX.md) for the difference between code-level capability and live-verified behavior.
 
