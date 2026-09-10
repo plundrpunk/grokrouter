@@ -14,6 +14,6 @@ The classifier removes `reviewed-ok` and `human-approved` whenever new commits a
 
 ## Merge behavior
 
-The `pr-merge-gate` job verifies that the computed risk label is unambiguous and that any required approval label was applied by a human GitHub user. It is advisory and cannot queue or perform a merge.
+The `pr-merge-gate` job is a required status check. It verifies that the computed risk label is unambiguous and that any required approval label was applied by a human GitHub user. In particular, a high-risk pull request cannot merge without a human-applied `human-approved` label. The gate never queues or performs a merge.
 
-The protected branch rejects deletion and force pushes, requires pull requests, and allows squash merges only. The required checks are macOS test/build, Windows test/build, dependency audit and review, and CodeQL analysis for JavaScript/TypeScript and Python.
+The protected branch rejects deletion and force pushes, requires pull requests, and allows squash merges only. The required checks are macOS test/build, Windows test/build, dependency audit and review, CodeQL analysis for JavaScript/TypeScript and Python, and `pr-merge-gate`.
